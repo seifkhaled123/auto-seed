@@ -24,22 +24,25 @@ export function buildInitCommand(): Command {
         options: [
           { value: "anthropic", label: "Anthropic (Claude)" },
           { value: "openai", label: "OpenAI" },
+          { value: "gemini", label: "Google Gemini" },
         ],
         initialValue: existing.provider ?? "anthropic",
       })) as ProviderName | symbol;
       if (p.isCancel(provider)) throw new CLIError("Cancelled.", 1);
 
+      const envVarName =
+        provider === "anthropic" ? "ANTHROPIC_API_KEY" :
+        provider === "openai"    ? "OPENAI_API_KEY" :
+                                   "GEMINI_API_KEY";
       const envKey =
-        provider === "anthropic"
-          ? process.env.ANTHROPIC_API_KEY
-          : process.env.OPENAI_API_KEY;
+        provider === "anthropic" ? process.env.ANTHROPIC_API_KEY :
+        provider === "openai"    ? process.env.OPENAI_API_KEY :
+                                   process.env.GEMINI_API_KEY;
 
       let apiKey: string | undefined;
       if (envKey) {
         const reuse = await p.confirm({
-          message: `${
-            provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"
-          } is set in your environment. Use it instead of storing a key?`,
+          message: `${envVarName} is set in your environment. Use it instead of storing a key?`,
           initialValue: true,
         });
         if (p.isCancel(reuse)) throw new CLIError("Cancelled.", 1);

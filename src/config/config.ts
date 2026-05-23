@@ -5,7 +5,7 @@ import { z } from "zod";
 import { CONFIG_DIR, CONFIG_FILE } from "../util/paths.js";
 import { CLIError } from "../util/errors.js";
 
-export const ProviderName = z.enum(["anthropic", "openai"]);
+export const ProviderName = z.enum(["anthropic", "openai", "gemini"]);
 export type ProviderName = z.infer<typeof ProviderName>;
 
 export const OutputFormat = z.enum(["sql", "ts"]);
@@ -14,6 +14,7 @@ export type OutputFormat = z.infer<typeof OutputFormat>;
 export const DEFAULT_MODELS: Record<ProviderName, string> = {
   anthropic: "claude-haiku-4-5-20251001",
   openai: "gpt-4o-mini",
+  gemini: "gemini-2.0-flash",
 };
 
 export const ConfigSchema = z.object({
@@ -22,6 +23,7 @@ export const ConfigSchema = z.object({
     .object({
       anthropic: z.string().optional(),
       openai: z.string().optional(),
+      gemini: z.string().optional(),
     })
     .partial()
     .optional(),
@@ -29,6 +31,7 @@ export const ConfigSchema = z.object({
     .object({
       anthropic: z.string().optional(),
       openai: z.string().optional(),
+      gemini: z.string().optional(),
     })
     .partial()
     .optional(),
@@ -112,7 +115,7 @@ export function resolveRuntime(
 
   if (!ProviderName.options.includes(provider)) {
     throw new CLIError(
-      `Unknown provider: ${provider}. Expected anthropic or openai.`,
+      `Unknown provider: ${provider}. Expected anthropic, openai, or gemini.`,
       1,
     );
   }
@@ -123,16 +126,21 @@ export function resolveRuntime(
     cfg.models?.[provider] ??
     DEFAULT_MODELS[provider];
 
-  const envKey = provider === "anthropic" ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY;
+  const envKey =
+    provider === "anthropic" ? env.ANTHROPIC_API_KEY :
+    provider === "openai"    ? env.OPENAI_API_KEY :
+                               env.GEMINI_API_KEY;
   const apiKey = envKey ?? cfg.apiKeys?.[provider] ?? "";
 
   if (!apiKey) {
+    const envVarName =
+      provider === "anthropic" ? "ANTHROPIC_API_KEY" :
+      provider === "openai"    ? "OPENAI_API_KEY" :
+                                 "GEMINI_API_KEY";
     throw new CLIError(
       `No API key found for provider "${provider}".`,
       1,
-      `Run \`auto-seed init\` or set ${
-        provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"
-      }.`,
+      `Run \`auto-seed init\` or set ${envVarName}.`,
     );
   }
 
@@ -162,8 +170,10 @@ const SETTABLE_PATHS = new Set([
   "provider",
   "models.anthropic",
   "models.openai",
+  "models.gemini",
   "apiKeys.anthropic",
   "apiKeys.openai",
+  "apiKeys.gemini",
   "defaults.format",
   "defaults.rows",
   "defaults.locale",
@@ -207,8 +217,10 @@ export function flatten(cfg: Config): Record<string, string> {
   if (cfg.provider) out.provider = cfg.provider;
   if (cfg.models?.anthropic) out["models.anthropic"] = cfg.models.anthropic;
   if (cfg.models?.openai) out["models.openai"] = cfg.models.openai;
+  if (cfg.models?.gemini) out["models.gemini"] = cfg.models.gemini;
   if (cfg.apiKeys?.anthropic) out["apiKeys.anthropic"] = maskKey(cfg.apiKeys.anthropic);
   if (cfg.apiKeys?.openai) out["apiKeys.openai"] = maskKey(cfg.apiKeys.openai);
+  if (cfg.apiKeys?.gemini) out["apiKeys.gemini"] = maskKey(cfg.apiKeys.gemini);
   if (cfg.defaults?.format) out["defaults.format"] = cfg.defaults.format;
   if (cfg.defaults?.rows) out["defaults.rows"] = cfg.defaults.rows;
   if (cfg.defaults?.locale) out["defaults.locale"] = cfg.defaults.locale;

@@ -18,7 +18,7 @@ export interface LLMResponse {
 }
 
 export interface LLMProvider {
-  readonly name: "anthropic" | "openai";
+  readonly name: "anthropic" | "openai" | "gemini";
   readonly model: string;
   generateJSON(input: LLMRequest): Promise<LLMResponse>;
 }
