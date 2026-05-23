@@ -155,13 +155,18 @@ function generateRowsForTable(g: GenInput): RowData[] {
       row[col.name] = value;
     }
 
-    // Composite uniques: enforce or retry whole row up to N times.
-    if (table.uniqueGroups.length > 0) {
-      const key = compositeKey(row, table.uniqueGroups);
+    // Composite uniques (including a composite PK with >1 columns).
+    const compositeConstraints: string[][] = [
+      ...(table.primaryKey.length > 1 ? [table.primaryKey] : []),
+      ...table.uniqueGroups,
+    ];
+    if (compositeConstraints.length > 0) {
+      const key = compositeKey(row, compositeConstraints);
       if (key !== null) {
         if (compositeKeys.has(key)) {
           let retries = 0;
-          while (compositeKeys.has(key) && retries < UNIQUE_RETRY_LIMIT) {
+          let curKey = key;
+          while (compositeKeys.has(curKey) && retries < UNIQUE_RETRY_LIMIT) {
             for (const col of ordered) {
               const plan = planByCol.get(col.name);
               const strategy = plan?.strategy ?? defaultStrategyForColumn(col);
@@ -181,16 +186,18 @@ function generateRowsForTable(g: GenInput): RowData[] {
                 warnings,
               });
             }
+            const next = compositeKey(row, compositeConstraints);
+            if (next === null) break;
+            curKey = next;
             retries++;
           }
-          const newKey = compositeKey(row, table.uniqueGroups);
-          if (newKey === null || compositeKeys.has(newKey)) {
+          if (compositeKeys.has(curKey)) {
             warnings.push(
               `${table.name}: composite uniqueness could not be satisfied for row ${i}; dropping row.`,
             );
             continue;
           }
-          compositeKeys.add(newKey);
+          compositeKeys.add(curKey);
         } else {
           compositeKeys.add(key);
         }

@@ -52,8 +52,13 @@ export async function parsePrismaSchema(filePath: string): Promise<SchemaIR> {
 
   let getDMMF: (args: { datamodel: string }) => Promise<DMMF>;
   try {
-    const mod = await import("@prisma/internals");
-    getDMMF = mod.getDMMF as unknown as typeof getDMMF;
+    const mod = (await import("@prisma/internals")) as unknown as {
+      getDMMF?: typeof getDMMF;
+      default?: { getDMMF?: typeof getDMMF };
+    };
+    const fn = mod.getDMMF ?? mod.default?.getDMMF;
+    if (!fn) throw new Error("getDMMF not exported by @prisma/internals");
+    getDMMF = fn;
   } catch (err) {
     throw new CLIError(
       "Failed to load @prisma/internals — is it installed?",
