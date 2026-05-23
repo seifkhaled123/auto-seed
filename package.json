@@ -1,0 +1,59 @@
+{
+  "name": "auto-seed",
+  "version": "0.1.0",
+  "description": "Generate realistic, relationally-accurate database seed data directly from your schema (Prisma, SQL DDL, TypeORM).",
+  "type": "module",
+  "bin": {
+    "auto-seed": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "bun run typecheck && bun run test && bun run build"
+  },
+  "keywords": [
+    "seed",
+    "database",
+    "fixtures",
+    "prisma",
+    "typeorm",
+    "sql",
+    "faker",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
+    "@clack/prompts": "^1.4.0",
+    "@faker-js/faker": "^10.0.0",
+    "@prisma/internals": "^7.0.0",
+    "commander": "^14.0.0",
+    "node-sql-parser": "^5.0.0",
+    "openai": "^6.0.0",
+    "ora": "^9.0.0",
+    "picocolors": "^1.1.0",
+    "seedrandom": "^3.0.5",
+    "ts-morph": "^28.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.0",
+    "@types/seedrandom": "^3.0.8",
+    "tsup": "^8.5.0",
+    "tsx": "^4.22.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0"
+  }
+}

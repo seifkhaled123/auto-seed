@@ -1,0 +1,94 @@
+import { Command } from "commander";
+import * as p from "@clack/prompts";
+import {
+  Config,
+  DEFAULT_MODELS,
+  loadConfig,
+  ProviderName,
+  saveConfig,
+} from "../config/config.js";
+import { configFilePath } from "../config/config.js";
+import { CLIError } from "../util/errors.js";
+import { log, pc } from "../util/logger.js";
+
+export function buildInitCommand(): Command {
+  return new Command("init")
+    .description("Interactive first-run setup: pick provider, paste API key, pick model.")
+    .action(async () => {
+      p.intro(pc.bold("auto-seed init"));
+
+      const existing = await loadConfig();
+
+      const provider = (await p.select({
+        message: "Which LLM provider would you like to use?",
+        options: [
+          { value: "anthropic", label: "Anthropic (Claude)" },
+          { value: "openai", label: "OpenAI" },
+        ],
+        initialValue: existing.provider ?? "anthropic",
+      })) as ProviderName | symbol;
+      if (p.isCancel(provider)) throw new CLIError("Cancelled.", 1);
+
+      const envKey =
+        provider === "anthropic"
+          ? process.env.ANTHROPIC_API_KEY
+          : process.env.OPENAI_API_KEY;
+
+      let apiKey: string | undefined;
+      if (envKey) {
+        const reuse = await p.confirm({
+          message: `${
+            provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"
+          } is set in your environment. Use it instead of storing a key?`,
+          initialValue: true,
+        });
+        if (p.isCancel(reuse)) throw new CLIError("Cancelled.", 1);
+        if (!reuse) {
+          const k = await p.password({
+            message: `Paste your ${provider} API key`,
+            validate: (v) => ((v ?? "").trim().length < 8 ? "Key looks too short." : undefined),
+          });
+          if (p.isCancel(k)) throw new CLIError("Cancelled.", 1);
+          apiKey = k.trim();
+        }
+      } else {
+        const k = await p.password({
+          message: `Paste your ${provider} API key`,
+          validate: (v) => ((v ?? "").trim().length < 8 ? "Key looks too short." : undefined),
+        });
+        if (p.isCancel(k)) throw new CLIError("Cancelled.", 1);
+        apiKey = k.trim();
+      }
+
+      const defaultModel = DEFAULT_MODELS[provider];
+      const model = await p.text({
+        message: `Default model for ${provider}?`,
+        initialValue: existing.models?.[provider] ?? defaultModel,
+        placeholder: defaultModel,
+      });
+      if (p.isCancel(model)) throw new CLIError("Cancelled.", 1);
+
+      const format = (await p.select({
+        message: "Default output format?",
+        options: [
+          { value: "sql", label: ".sql (INSERT statements)" },
+          { value: "ts", label: ".ts (Prisma/TypeORM/plain script)" },
+        ],
+        initialValue: existing.defaults?.format ?? "sql",
+      })) as "sql" | "ts" | symbol;
+      if (p.isCancel(format)) throw new CLIError("Cancelled.", 1);
+
+      const next: Config = {
+        ...existing,
+        provider,
+        models: { ...(existing.models ?? {}), [provider]: model },
+        apiKeys: { ...(existing.apiKeys ?? {}), ...(apiKey ? { [provider]: apiKey } : {}) },
+        defaults: { ...(existing.defaults ?? {}), format },
+      };
+
+      await saveConfig(next);
+      p.outro(`Saved to ${pc.cyan(configFilePath())}`);
+      log.info("");
+      log.info(pc.dim("Run `auto-seed generate` in a project to get started."));
+    });
+}
