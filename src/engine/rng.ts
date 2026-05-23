@@ -12,6 +12,9 @@ export interface SeededRng {
   pickWeighted<T>(arr: readonly T[], weights: readonly number[]): T;
 }
 
+/** Fixed reference date so that faker.date.* methods are deterministic for a given seed. */
+const DETERMINISTIC_REF_DATE = new Date("2026-01-01T00:00:00.000Z");
+
 export function makeRng(seed: number | string): SeededRng {
   const rng = seedrandom(String(seed));
   // Faker shares the same seed so faker.* calls are reproducible too.
@@ -21,6 +24,8 @@ export function makeRng(seed: number | string): SeededRng {
       ? seed | 0
       : hash32(String(seed));
   faker.seed(seedInt);
+  // Pin faker's default refDate so date.recent / date.past / date.future are stable across runs.
+  faker.setDefaultRefDate(DETERMINISTIC_REF_DATE);
 
   return {
     random: () => rng(),

@@ -5,8 +5,8 @@ import { buildGenerateCommand } from "./commands/generate.js";
 import { isCLIError } from "./util/errors.js";
 import { log, setVerbose, isVerbose } from "./util/logger.js";
 
-// Read version from package.json at runtime (bundled by tsup as embedded data).
-const VERSION = "0.1.0";
+// Bumped per release; kept in sync with package.json#version manually.
+const VERSION = "1.0.0";
 
 function buildProgram(): Command {
   const program = new Command();
