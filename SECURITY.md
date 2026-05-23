@@ -34,7 +34,7 @@ If the issue is in a third-party dependency, I'll forward it upstream and track 
 
 - Reads schema files from the local working directory.
 - Reads an API key from `~/.auto-seed/config.json` or environment variables.
-- Makes outbound HTTPS calls to the configured LLM provider (Anthropic or OpenAI).
+- Makes outbound HTTPS calls to the configured LLM provider (Anthropic, OpenAI, or Google Gemini).
 - Writes a `.sql` or `.ts` file to a path the user chooses.
 
 In-scope concerns:
@@ -57,7 +57,7 @@ Out of scope:
 
 These are good habits whether or not you've found a bug:
 
-- Prefer **environment variables** (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) in CI; the config file is a developer-machine convenience.
+- Prefer **environment variables** (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) in CI; the config file is a developer-machine convenience.
 - The config file is created with mode `0600`. If you copy it across machines, preserve that mode (`chmod 600 ~/.auto-seed/config.json`).
 - Never commit `~/.auto-seed/config.json`, generated seed files containing real production data, or anything inside `.env*` to source control.
 - Generated `.sql` and `.ts` seed files contain mock data only; do not feed real PII through the tool.

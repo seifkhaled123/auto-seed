@@ -23,7 +23,7 @@ Requirements:
 
 - **Node.js ≥ 18**
 - **Bun ≥ 1.0** (used for dev scripts and tests; the published artifact is plain Node-runnable ESM)
-- A current Anthropic or OpenAI API key only if you want to exercise the real LLM path; the test suite uses a mocked provider.
+- A current Anthropic, OpenAI, or Gemini API key only if you want to exercise the real LLM path; the test suite uses a mocked provider.
 
 ```bash
 git clone https://github.com/seif-kh/auto-seed.git
@@ -51,7 +51,7 @@ src/
 ├─ parsers/              Prisma / SQL / TypeORM → SchemaIR
 ├─ ir/types.ts           common SchemaIR shape
 ├─ plan/                 Seed Plan zod schema, prompts, LLM call, --plan-only / --plan
-├─ llm/                  LLMProvider interface + Anthropic / OpenAI implementations
+├─ llm/                  LLMProvider interface + Anthropic / OpenAI / Gemini implementations
 ├─ engine/               topo sort, seeded RNG, strategies, generation, integrity sweep
 ├─ render/               sql.ts (dialect-aware) and typescript.ts (Prisma/TypeORM/plain)
 └─ util/                 logger, errors, paths, cost, rows-spec, atomic writeFile

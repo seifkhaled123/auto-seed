@@ -22,7 +22,7 @@ npx auto-seed init
 npx auto-seed generate
 ```
 
-The first command opens an interactive prompt to pick a provider (Anthropic or OpenAI), paste a key, and choose a default model. The key is stored at `~/.auto-seed/config.json` with `0600` permissions and is masked on display.
+The first command opens an interactive prompt to pick a provider (Anthropic, OpenAI, or Google Gemini), paste a key, and choose a default model. The key is stored at `~/.auto-seed/config.json` with `0600` permissions and is masked on display.
 
 The second command:
 
@@ -45,7 +45,7 @@ The second command:
 | `--out <path>` | `./seed.<ext>` | Where to write the file. |
 | `--tables <a,b>` | all | Generate only a subset of tables. |
 | `--locale <code>` | `en` | Faker locale hint. |
-| `--provider <a\|o>` | from config | Override LLM provider for this run. |
+| `--provider <a\|o\|g>` | from config | Override LLM provider for this run (`anthropic`, `openai`, `gemini`). |
 | `--model <id>` | from config | Override LLM model for this run. |
 | `--dialect <pg\|mysql\|sqlite>` | `postgresql` | SQL dialect (when input is `.sql`). |
 | `--hint "<text>"` | — | Free-text domain hint (e.g. "fintech app: accounts, ledgers, transactions"). |
@@ -90,15 +90,15 @@ npx auto-seed generate --hint "fintech app: accounts, ledgers, transactions"
 ```json
 {
   "provider": "anthropic",
-  "models": { "anthropic": "claude-haiku-4-5-20251001", "openai": "gpt-4o-mini" },
-  "apiKeys": { "anthropic": "sk-ant-…", "openai": "sk-…" },
+  "models": { "anthropic": "claude-haiku-4-5-20251001", "openai": "gpt-4o-mini", "gemini": "gemini-2.0-flash" },
+  "apiKeys": { "anthropic": "sk-ant-…", "openai": "sk-…", "gemini": "AIza…" },
   "defaults": { "format": "sql" }
 }
 ```
 
 Environment variables **take precedence** over the file (recommended in CI):
 
-- `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`
 - `AUTO_SEED_PROVIDER` / `AUTO_SEED_MODEL`
 
 Useful one-liners:
@@ -172,7 +172,7 @@ auto-seed generate --mode direct --rows "posts:20" --hint "fintech blog about re
 ## Notes
 
 - The npm name `auto-seed` should be verified before first publish. If taken, the package may publish as `@<scope>/auto-seed` while the binary remains `auto-seed`.
-- Built-in default models: Anthropic `claude-haiku-4-5-20251001`, OpenAI `gpt-4o-mini`. Both overridable.
+- Built-in default models: Anthropic `claude-haiku-4-5-20251001`, OpenAI `gpt-4o-mini`, Gemini `gemini-2.0-flash`. All overridable.
 - Built artifact is plain ESM Node-runnable; `bun` is used for dev/test ergonomics.
 
 ## License
