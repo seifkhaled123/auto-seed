@@ -4,7 +4,7 @@
   "description": "Generate realistic, relationally-accurate database seed data directly from your schema (Prisma, SQL DDL, TypeORM).",
   "type": "module",
   "bin": {
-    "auto-seed": "./dist/index.js"
+    "auto-seed": "dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [
