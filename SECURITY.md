@@ -11,7 +11,9 @@
 
 ## Reporting a vulnerability
 
-**Please do not file public GitHub issues for security problems.**
+Public issues and pull requests are welcome for normal bugs, documentation fixes, and feature work.
+
+For suspected security vulnerabilities, please email first instead of opening a public issue or PR that includes exploit details. This gives the project time to investigate and prepare a fix before the vulnerability is public.
 
 Email **seif.kh021@gmail.com** with:
 

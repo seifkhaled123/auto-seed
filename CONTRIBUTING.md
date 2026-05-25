@@ -1,6 +1,6 @@
 # Contributing to auto-seed
 
-Thanks for taking the time to contribute! This document explains how to set up the project, the conventions the codebase follows, and what kinds of changes are most welcome.
+Thanks for taking the time to contribute! Pull requests are welcome. This document explains how to set up the project, the conventions the codebase follows, and what kinds of changes are most useful.
 
 ## Code of conduct
 
@@ -11,7 +11,7 @@ Participation in this project is governed by the [Code of Conduct](CODE_OF_CONDU
 | Type | What's most useful |
 |---|---|
 | Bug reports | A minimal schema fixture that reproduces the issue + the exact command + the error/exit code. |
-| Feature requests | An issue describing the use case before the PR. Some features are explicit non-goals (see PRD §17). |
+| Feature requests | PRs are welcome. For larger or ambiguous features, opening an issue first helps align on scope because some features are explicit non-goals (see PRD §17). |
 | Parser improvements | New SQL dialects, edge cases in Prisma/TypeORM decorators. Always include a fixture. |
 | Renderer improvements | Better ORM idioms, escape-edge cases, new dialect quoting. Always include a snapshot test. |
 | Strategy improvements | Smarter type-based fallbacks, faker method choices for common column-name patterns. |
@@ -98,6 +98,7 @@ Keep the subject line under ~72 chars. Use the body for the *why* if it isn't ob
 
 ## Pull requests
 
+- Contributions are welcome from new and returning contributors.
 - Open a PR against `main`. Small, focused PRs review faster than big ones.
 - The PR description should call out:
   - The user-visible behavior change
