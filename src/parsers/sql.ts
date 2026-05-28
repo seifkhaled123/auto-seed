@@ -147,8 +147,18 @@ function parseColumnDef(
   if (!dt) return null;
   const dataTypeRaw = String(dt.dataType ?? "");
   const dataType = dataTypeRaw.toLowerCase();
-  const kind = sqlTypeToKind(dataType);
+  let kind = sqlTypeToKind(dataType);
   const length = (dt.length as number | undefined) ?? undefined;
+
+  // MySQL inline enum(...) / set(...) carry their members in the AST.
+  let enumValues: string[] | undefined;
+  if (dataType === "enum" || dataType === "set") {
+    const vals = extractEnumMembers(dt);
+    if (vals.length > 0) {
+      kind = "enum";
+      enumValues = vals;
+    }
+  }
 
   const nullableField = def.nullable as { type?: string; value?: string } | undefined;
   const nullable =
@@ -203,11 +213,24 @@ function parseColumnDef(
   };
   if (length !== undefined && kind === "string") col.maxLength = length;
   if (foreignKey) col.foreignKey = foreignKey;
+  if (enumValues) col.enumValues = enumValues;
 
   if (kind === "unknown") {
     warnings.push(`${tableName}.${name}: unrecognized type "${dataType}" — using fallback.`);
   }
   return col;
+}
+
+/**
+ * Pulls enum/set member strings out of node-sql-parser's MySQL shape:
+ *   { dataType: "ENUM", expr: { type: "expr_list", value: [{ value: "male" }, ...] } }
+ */
+function extractEnumMembers(dt: Record<string, unknown>): string[] {
+  const expr = dt.expr as { value?: unknown } | undefined;
+  if (!expr || !Array.isArray(expr.value)) return [];
+  return expr.value
+    .map((e) => (e && typeof e === "object" ? (e as { value?: unknown }).value : undefined))
+    .filter((v): v is string => typeof v === "string");
 }
 
 function sqlTypeToKind(t: string): ScalarKind {
@@ -248,5 +271,17 @@ function sqlTypeToKind(t: string): ScalarKind {
   if (x === "numeric" || x === "decimal" || x === "money") return "decimal";
   if (x === "timestamp" || x === "timestamptz" || x === "datetime") return "datetime";
   if (x === "date") return "date";
+  // Spatial types: approximated as strings (no true WKT/geometry generation in v1).
+  if (
+    x === "point" ||
+    x === "geometry" ||
+    x === "linestring" ||
+    x === "polygon" ||
+    x === "multipoint" ||
+    x === "multilinestring" ||
+    x === "multipolygon" ||
+    x === "geometrycollection"
+  )
+    return "string";
   return "unknown";
 }
