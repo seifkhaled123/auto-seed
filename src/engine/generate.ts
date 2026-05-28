@@ -35,12 +35,17 @@ export interface EngineOutput {
 const UNIQUE_RETRY_LIMIT = 50;
 
 export function runEngine(input: EngineInput): EngineOutput {
-  const { ir, plan } = input;
+  const { plan } = input;
   const warnings: string[] = [];
   const seed =
     input.seed ?? Math.floor(Math.random() * 0x7fffffff);
   const rng = makeRng(seed);
   const faker: Faker = getFaker(input.locale);
+
+  // Augment IR FK metadata using the plan's reference strategies so that
+  // columns with no explicit DDL FK constraint (e.g. WordPress's link_owner)
+  // still create a dependency edge in the topological sort.
+  const ir = augmentIRFromPlan(input.ir, plan);
 
   // Engine re-derives topological order rather than trusting plan.generationOrder.
   const topo = topoSort(ir);
@@ -506,4 +511,34 @@ function validateIntegrity(ir: SchemaIR, dataset: Dataset) {
     }
   }
   log.debug("[engine] integrity check passed");
+}
+
+/**
+ * Returns a shallow copy of the IR with FK metadata added to any column whose
+ * plan uses a `reference` strategy but whose DDL carried no explicit FK constraint.
+ * This lets topoSort see the dependency and order tables correctly.
+ */
+function augmentIRFromPlan(ir: SchemaIR, plan: SeedPlan): SchemaIR {
+  const knownTables = new Set(ir.tables.map((t) => t.name));
+  const planByTable = new Map(plan.tables.map((t) => [t.table, t]));
+
+  const tables = ir.tables.map((table) => {
+    const tablePlan = planByTable.get(table.name);
+    if (!tablePlan) return table;
+
+    let changed = false;
+    const columns = table.columns.map((col) => {
+      if (col.foreignKey) return col; // DDL FK already present
+      const colPlan = tablePlan.columns.find((cp) => cp.column === col.name);
+      if (!colPlan || colPlan.strategy.type !== "reference") return col;
+      const ref = colPlan.strategy;
+      if (!knownTables.has(ref.table)) return col; // referenced table not in schema
+      changed = true;
+      return { ...col, foreignKey: { table: ref.table, column: ref.column } };
+    });
+
+    return changed ? { ...table, columns } : table;
+  });
+
+  return { ...ir, tables };
 }
