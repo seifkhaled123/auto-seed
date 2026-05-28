@@ -118,6 +118,10 @@ const FALLBACK_STRATEGY = { type: "faker", method: "lorem.words", args: [3] } as
 
 // Always-override columns: any strategy the LLM picks is replaced unconditionally.
 // Used for columns whose correct value is always a fixed constant.
+// IMPORTANT: only list names distinctive enough that they cannot plausibly mean
+// something else in an unrelated schema. Generic names (count, status, user_status)
+// must NOT go here — they would silently zero a meaningful column. Integer overflow
+// for those is handled safely by coerceToColumnKind in the engine instead.
 const COL_NAME_ALWAYS: Record<string, Record<string, unknown>> = {
   term_group:    { type: "static", value: 0 },
   menu_order:    { type: "static", value: 0 },
@@ -125,8 +129,6 @@ const COL_NAME_ALWAYS: Record<string, Record<string, unknown>> = {
   comment_count: { type: "static", value: 0 },
   link_rating:   { type: "static", value: 0 },
   term_order:    { type: "static", value: 0 },
-  user_status:   { type: "static", value: 0 },
-  count:         { type: "static", value: 0 },
 };
 
 // Lorem-only overrides: fires only when the LLM fell back to a lorem.* strategy.

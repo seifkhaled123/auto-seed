@@ -61,11 +61,27 @@ LLM returned strategy objects whose `type` isn't in the Zod union (e.g. `autoinc
 ### Column-name semantic overrides
 LLM picks lorem text / unbounded numbers for columns with well-known meaning.
 - `COL_NAME_ALWAYS` (in `generatePlan.ts`): unconditionally forces `0` for counter/order columns
-  (`term_group`, `menu_order`, `comment_karma`, `comment_count`, `link_rating`, `term_order`,
-  `user_status`, `count`).
+  (`term_group`, `menu_order`, `comment_karma`, `comment_count`, `link_rating`, `term_order`).
 - `COL_NAME_LOREM`: fires only when the LLM fell back to `lorem.*`, substitutes the right enum/faker
   method (`link_target`, `link_rel`, `comment_type`, `post_mime_type`, `taxonomy`, `user_pass`,
   `user_activation_key`, `*_agent`).
+
+**Over-fitting guard — read before editing `COL_NAME_ALWAYS`.** This table matches by exact column
+name and fires *unconditionally*, so it must only contain names distinctive enough that they cannot
+mean something else in an unrelated schema. We removed `user_status` and `count` from it because a
+future user's schema could legitimately use those for meaningful values, and forcing `0` would
+silently corrupt them. Integer overflow for such columns is already handled safely by
+`coerceToColumnKind` (caps to signed 32-bit). Rule of thumb: CMS-distinctive names (`term_group`,
+`comment_karma`) are safe here; generic names (`count`, `status`, `type`, `order`) are NOT — put
+those in `COL_NAME_LOREM` (no-op unless the LLM already failed) or leave them to the engine.
+
+### Generalization vs. over-fitting (whole codebase)
+Everything downstream of parsing (Faker coercion, `STRATEGY_COERCIONS`, `coerceToColumnKind`,
+`augmentIRFromPlan`, DATETIME formatting, dialect handling) is schema-agnostic and applies to any
+future schema. The only WordPress/CMS-fitted parts are the `COL_NAME_*` tables (exact name match)
+and the *examples* in the system prompt. Those are inert for unrelated schemas — except the
+`COL_NAME_ALWAYS` over-fit risk noted above. When adding schema-specific knowledge, prefer
+`COL_NAME_LOREM` (conditional, safe) over `COL_NAME_ALWAYS` (unconditional, risky).
 
 ### Value type mismatch vs. column kind
 A string strategy on an INT column wrote lorem words into an integer field; large `number.int`
