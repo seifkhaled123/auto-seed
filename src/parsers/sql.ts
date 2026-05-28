@@ -214,7 +214,7 @@ function sqlTypeToKind(t: string): ScalarKind {
   const x = t.toLowerCase();
   if (
     x.includes("char") ||
-    x === "text" ||
+    x.includes("text") ||
     x.includes("clob") ||
     x === "string" ||
     x === "citext"
