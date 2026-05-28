@@ -84,5 +84,7 @@ Rules:
 - For boolean columns use { "type": "faker", "method": "datatype.boolean" }. Never use { "type": "boolean" }.
 - Respect nullability: only include nullRatio for nullable columns (0 means never null; 1 means always null).
 - Never include strategies the engine handles: do not hardcode FK ids.
-- For columns whose name implies a fixed vocabulary (status, type, role, state, visibility, format, taxonomy, mime_type, approved, target), use { "type": "enum" } with realistic values — never lorem/faker text. Example: post_status → ["publish","draft","pending","private"], post_type → ["post","page","attachment"], comment_approved → ["1","0","spam"].
+- For columns whose name implies a fixed vocabulary (status, type, role, state, visibility, format, taxonomy, mime_type, approved, target, rel), use { "type": "enum" } with realistic values — never lorem/faker text. Examples: post_status → ["publish","draft","pending","private"], post_type → ["post","page","attachment"], comment_approved → ["1","0","spam"], comment_type → ["comment","pingback","trackback",""], link_target → ["","_blank","_self","_top"], post_mime_type → ["","image/jpeg","image/png","image/gif","image/webp","video/mp4","application/pdf"], link_rel → ["","nofollow","friend","colleague","met"].
+- For columns named *_agent or user_agent use { "type": "faker", "method": "internet.userAgent" }.
+- For columns named term_group, menu_order, comment_karma, link_rating, term_order that have no meaningful domain value, use { "type": "static", "value": 0 }.
 - For date/datetime columns use faker methods that return Date objects: date.recent, date.past, date.future, date.between.`;
