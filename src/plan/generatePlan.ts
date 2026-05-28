@@ -116,29 +116,32 @@ const VALID_STRATEGY_TYPES = new Set([
 
 const FALLBACK_STRATEGY = { type: "faker", method: "lorem.words", args: [3] } as const;
 
-// When the LLM assigns a lorem-text strategy to a column whose name implies a
-// well-known fixed vocabulary or numeric constant, substitute the right strategy.
-// Only fires when the LLM actually fell back to lorem (prevents overriding a
-// correct LLM choice).
-const COL_NAME_OVERRIDES: Record<string, Record<string, unknown>> = {
-  // Numeric counters/orderings that should be 0
-  term_group:     { type: "static", value: 0 },
-  menu_order:     { type: "static", value: 0 },
-  comment_karma:  { type: "static", value: 0 },
-  comment_count:  { type: "static", value: 0 },
-  link_rating:    { type: "static", value: 0 },
-  term_order:     { type: "static", value: 0 },
-  // HTML / web vocabularies
-  link_target:    { type: "enum", values: ["", "_blank", "_self", "_top"] },
-  link_rel:       { type: "enum", values: ["", "nofollow", "friend", "colleague", "met"] },
-  // HTTP / browser
-  comment_agent:  { type: "faker", method: "internet.userAgent" },
-  user_agent:     { type: "faker", method: "internet.userAgent" },
-  // Media
-  post_mime_type: { type: "enum", values: ["", "image/jpeg", "image/png", "image/gif", "image/webp", "video/mp4", "application/pdf"] },
-  mime_type:      { type: "enum", values: ["", "image/jpeg", "image/png", "image/gif", "image/webp", "video/mp4", "application/pdf"] },
-  // CMS comment taxonomy
-  comment_type:   { type: "enum", values: ["comment", "pingback", "trackback", ""] },
+// Always-override columns: any strategy the LLM picks is replaced unconditionally.
+// Used for columns whose correct value is always a fixed constant.
+const COL_NAME_ALWAYS: Record<string, Record<string, unknown>> = {
+  term_group:    { type: "static", value: 0 },
+  menu_order:    { type: "static", value: 0 },
+  comment_karma: { type: "static", value: 0 },
+  comment_count: { type: "static", value: 0 },
+  link_rating:   { type: "static", value: 0 },
+  term_order:    { type: "static", value: 0 },
+  user_status:   { type: "static", value: 0 },
+  count:         { type: "static", value: 0 },
+};
+
+// Lorem-only overrides: fires only when the LLM fell back to a lorem.* strategy.
+// Used for columns with a fixed vocabulary or a known faker method.
+const COL_NAME_LOREM: Record<string, Record<string, unknown>> = {
+  link_target:         { type: "enum", values: ["", "_blank", "_self", "_top"] },
+  link_rel:            { type: "enum", values: ["", "nofollow", "friend", "colleague", "met"] },
+  comment_agent:       { type: "faker", method: "internet.userAgent" },
+  user_agent:          { type: "faker", method: "internet.userAgent" },
+  post_mime_type:      { type: "enum", values: ["", "image/jpeg", "image/png", "image/gif", "image/webp", "video/mp4", "application/pdf"] },
+  mime_type:           { type: "enum", values: ["", "image/jpeg", "image/png", "image/gif", "image/webp", "video/mp4", "application/pdf"] },
+  comment_type:        { type: "enum", values: ["comment", "pingback", "trackback", ""] },
+  taxonomy:            { type: "enum", values: ["category", "post_tag", "nav_menu", "link_category", "post_format"] },
+  user_pass:           { type: "faker", method: "internet.password" },
+  user_activation_key: { type: "faker", method: "string.alphanumeric", args: [{ length: 32 }] },
 };
 
 function coerceRawPlan(raw: unknown): unknown {
@@ -161,15 +164,20 @@ function coerceRawPlan(raw: unknown): unknown {
           const strat = s as Record<string, unknown>;
           const colName = String(col.column ?? "").toLowerCase();
 
-          // 0. Column-name override when the LLM fell back to lorem text for a
-          //    column whose name implies a known fixed vocabulary or numeric zero.
+          // 0a. Always-override: replace any LLM strategy for well-known zero-value columns.
+          if (COL_NAME_ALWAYS[colName]) {
+            return { ...col, strategy: COL_NAME_ALWAYS[colName] };
+          }
+
+          // 0b. Lorem-only override: substitute when LLM fell back to lorem.* for a
+          //     column whose name implies a known vocabulary or faker method.
           if (
             strat.type === "faker" &&
             typeof strat.method === "string" &&
             strat.method.startsWith("lorem.") &&
-            COL_NAME_OVERRIDES[colName]
+            COL_NAME_LOREM[colName]
           ) {
-            return { ...col, strategy: COL_NAME_OVERRIDES[colName] };
+            return { ...col, strategy: COL_NAME_LOREM[colName] };
           }
 
           // 1. Known invalid type → map to valid strategy

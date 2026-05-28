@@ -143,6 +143,8 @@ const FAKER_V9_TO_V10: Record<string, string> = {
   // misc LLM hallucinations
   "internet.domainWord": "internet.domainWord",
   "internet.rss": "internet.url",
+  "internet.rssFeed": "internet.url",
+  "internet.imageUrl": "image.url",
   "company.companyName": "company.name",
   "company.catchPhrase": "company.catchPhrase",
 };
