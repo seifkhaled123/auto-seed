@@ -68,20 +68,77 @@ export function defaultStrategyForColumn(col: ColumnIR): ColumnStrategy {
   return { type: "faker", method: "lorem.words", args: [3] };
 }
 
+// Maps Faker v8/v9 method names that LLMs commonly hallucinate to their v10 equivalents.
+const FAKER_V9_TO_V10: Record<string, string> = {
+  "datatype.number": "number.int",
+  "datatype.float": "number.float",
+  "datatype.bigInt": "number.bigInt",
+  "datatype.uuid": "string.uuid",
+  "datatype.hexadecimal": "string.hexadecimal",
+  "datatype.string": "string.sample",
+  "internet.userName": "internet.username",
+  "random.alphaNumeric": "string.alphanumeric",
+  "random.alpha": "string.alpha",
+  "random.numeric": "string.numeric",
+  "random.word": "lorem.word",
+  "random.words": "lorem.words",
+  "random.locale": "location.countryCode",
+  "image.imageUrl": "image.url",
+  "image.abstract": "image.url",
+  "image.animals": "image.url",
+  "image.business": "image.url",
+  "image.cats": "image.url",
+  "image.city": "image.url",
+  "image.food": "image.url",
+  "image.nature": "image.url",
+  "image.people": "image.url",
+  "image.sports": "image.url",
+  "image.technics": "image.url",
+  "image.transport": "image.url",
+  "name.firstName": "person.firstName",
+  "name.lastName": "person.lastName",
+  "name.fullName": "person.fullName",
+  "name.middleName": "person.middleName",
+  "name.gender": "person.sex",
+  "name.prefix": "person.prefix",
+  "name.suffix": "person.suffix",
+  "name.jobArea": "person.jobArea",
+  "name.jobDescriptor": "person.jobDescriptor",
+  "name.jobTitle": "person.jobTitle",
+  "name.jobType": "person.jobType",
+  "address.city": "location.city",
+  "address.country": "location.country",
+  "address.countryCode": "location.countryCode",
+  "address.county": "location.county",
+  "address.direction": "location.direction",
+  "address.latitude": "location.latitude",
+  "address.longitude": "location.longitude",
+  "address.state": "location.state",
+  "address.stateAbbr": "location.state",
+  "address.street": "location.street",
+  "address.streetAddress": "location.streetAddress",
+  "address.streetName": "location.street",
+  "address.zipCode": "location.zipCode",
+  "address.timeZone": "location.timeZone",
+  "phone.phoneNumber": "phone.number",
+  "phone.phoneNumberFormat": "phone.number",
+};
+
 function callFaker(faker: Faker, dotted: string, args?: unknown[]): RowValue {
-  const path = dotted.split(".");
+  const resolved = FAKER_V9_TO_V10[dotted] ?? dotted;
+  const path = resolved.split(".");
   let cur: unknown = faker;
   for (let i = 0; i < path.length - 1; i++) {
     const k = path[i]!;
     cur = (cur as Record<string, unknown>)?.[k];
     if (cur === undefined) {
-      throw new Error(`Faker namespace not found: ${dotted}`);
+      throw new Error(`Faker namespace not found: ${resolved}`);
     }
   }
   const fnName = path[path.length - 1]!;
   const fn = (cur as Record<string, unknown>)[fnName];
   if (typeof fn !== "function") {
-    throw new Error(`Faker method not found: ${dotted}`);
+    throw new Error(`Faker method not found: ${resolved}`);
   }
   const a = args && args.length > 0 ? args : [];
   const v = (fn as (...x: unknown[]) => unknown).apply(cur, a);

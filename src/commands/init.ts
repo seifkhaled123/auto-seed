@@ -11,6 +11,7 @@ import { configFilePath } from "../config/config.js";
 import { CLIError } from "../util/errors.js";
 import { log, pc } from "../util/logger.js";
 import { listModels } from "../llm/list-models.js";
+import { lookupPrice } from "../util/cost.js";
 
 export function buildInitCommand(): Command {
   return new Command("init")
@@ -85,11 +86,14 @@ export function buildInitCommand(): Command {
         const initialValue = modelChoices.includes(savedModel) ? savedModel : modelChoices[0];
         model = (await p.select({
           message: `Default model for ${provider}?`,
-          options: modelChoices.map((id) => ({
-            value: id,
-            label: id,
-            hint: id === defaultModel ? "recommended" : undefined,
-          })),
+          options: modelChoices.map((id) => {
+            const price = lookupPrice(id);
+            const priceHint = price
+              ? `$${price.input}/1M in · $${price.output}/1M out`
+              : "see provider docs for pricing";
+            const hint = id === defaultModel ? `${priceHint}  ★ recommended` : priceHint;
+            return { value: id, label: id, hint };
+          }),
           initialValue,
         })) as string | symbol;
       } else {

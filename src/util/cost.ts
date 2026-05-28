@@ -23,6 +23,10 @@ export interface CostEstimate {
   totalUsd: number;
 }
 
+export function lookupPrice(model: string): { input: number; output: number } | null {
+  return PRICES[model] ?? null;
+}
+
 export function estimateCost(model: string, usage: TokenUsage): CostEstimate {
   const price = PRICES[model];
   if (!price) {

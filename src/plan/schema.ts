@@ -80,6 +80,7 @@ Rules:
 - Use "sequence" or "uuid" for PK columns based on the column kind.
 - For enum columns, pick "enum" with the declared values; status-like enums should be weighted with the most common value heaviest.
 - Pick the most realistic @faker-js/faker v10 method based on the column name + type (e.g. internet.email, person.fullName, company.name, location.city, commerce.product).
+- Faker v10 renamed these: use number.int (NOT datatype.number), number.float (NOT datatype.float), internet.username (NOT internet.userName), person.* (NOT name.*), location.* (NOT address.*), string.alphanumeric (NOT random.alphaNumeric), image.url (NOT image.imageUrl), phone.number (NOT phone.phoneNumber).
 - For boolean columns use { "type": "faker", "method": "datatype.boolean" }. Never use { "type": "boolean" }.
 - Respect nullability: only include nullRatio for nullable columns (0 means never null; 1 means always null).
 - Never include strategies the engine handles: do not hardcode FK ids.`;
