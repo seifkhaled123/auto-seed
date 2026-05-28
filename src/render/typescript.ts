@@ -72,7 +72,7 @@ function renderPrisma(
   for (const t of ordered) {
     const rows = dataset.get(t.name) ?? [];
     if (rows.length === 0) continue;
-    const cols = t.columns.map((c) => c.name);
+    const cols = t.columns.filter((c) => !c.isGenerated).map((c) => c.name);
     const accessor = lowerFirst(t.name);
     lines.push(`  await prisma.${accessor}.createMany({`);
     lines.push(`    data: [`);
@@ -113,7 +113,7 @@ function renderTypeOrm(
   for (const t of ordered) {
     const rows = dataset.get(t.name) ?? [];
     if (rows.length === 0) continue;
-    const cols = t.columns.map((c) => c.name);
+    const cols = t.columns.filter((c) => !c.isGenerated).map((c) => c.name);
     lines.push(`  await AppDataSource.createQueryBuilder()`);
     lines.push(`    .insert()`);
     lines.push(`    .into(${JSON.stringify(t.name)})`);
@@ -145,7 +145,7 @@ function renderPlain(
   lines.push("export const seedData = {");
   for (const t of ordered) {
     const rows = dataset.get(t.name) ?? [];
-    const cols = t.columns.map((c) => c.name);
+    const cols = t.columns.filter((c) => !c.isGenerated).map((c) => c.name);
     lines.push(`  ${safeKey(t.name)}: [`);
     for (const row of rows) {
       lines.push(`    ${rowObject(row, cols)},`);

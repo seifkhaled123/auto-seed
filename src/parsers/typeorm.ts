@@ -51,6 +51,9 @@ const TYPE_TO_KIND: Record<string, ScalarKind> = {
   timestamptz: "datetime",
   json: "json",
   jsonb: "json",
+  "simple-json": "json",
+  "simple-array": "string",
+  set: "string",
 };
 
 const TS_TO_KIND: Record<string, ScalarKind> = {
@@ -84,11 +87,20 @@ export async function parseTypeOrmEntities(entityFiles: string[]): Promise<Schem
   // Map class name → table name (so relations can resolve cross-file).
   const classToTable = new Map<string, string>();
 
-  // Pre-pass: collect class → table name
+  // Pre-pass: collect class → table name, and a registry of TS enums so that
+  // `@Column({ type: "enum", enum: SomeEnum })` can resolve its member values.
+  const enumRegistry = new Map<string, string[]>();
   for (const sf of project.getSourceFiles()) {
     for (const cls of sf.getClasses()) {
       const tableName = readEntityName(cls);
       if (tableName) classToTable.set(cls.getName() ?? tableName, tableName);
+    }
+    for (const en of sf.getEnums()) {
+      const vals = en.getMembers().map((mem) => {
+        const v = mem.getValue();
+        return v !== undefined ? String(v) : mem.getName();
+      });
+      if (vals.length > 0) enumRegistry.set(en.getName(), vals);
     }
   }
 
@@ -200,11 +212,17 @@ export async function parseTypeOrmEntities(entityFiles: string[]): Promise<Schem
           if (!rawType) rawType = "int";
         }
 
-        // Enum
+        // Enum — values may be an inline array or a reference to a TS enum.
         let enumValues: string[] | undefined;
         if (colOpts.enum && colOpts.enum.length > 0) {
           kind = "enum";
           enumValues = colOpts.enum;
+        } else if (colOpts.enumRef) {
+          const resolved = enumRegistry.get(colOpts.enumRef);
+          if (resolved && resolved.length > 0) {
+            kind = "enum";
+            enumValues = resolved;
+          }
         }
 
         const col: ColumnIR = {
@@ -278,6 +296,7 @@ interface ColumnOpts {
   nullable?: boolean;
   unique?: boolean;
   enum?: string[];
+  enumRef?: string;
   hasDefault?: boolean;
 }
 
@@ -302,7 +321,11 @@ function readColumnOptions(dec: Decorator): ColumnOpts {
     if (parsed.nullable !== undefined) opts.nullable = parsed.nullable === "true";
     if (parsed.unique !== undefined) opts.unique = parsed.unique === "true";
     if (parsed.default !== undefined) opts.hasDefault = true;
-    if (parsed.enum) opts.enum = parsed.enumArr ?? [];
+    if (parsed.enumArr && parsed.enumArr.length > 0) {
+      opts.enum = parsed.enumArr; // inline array literal: enum: ['a','b']
+    } else if (parsed.enum && parsed.enum !== "1") {
+      opts.enumRef = parsed.enum; // identifier reference: enum: SomeEnum
+    }
   }
   return opts;
 }

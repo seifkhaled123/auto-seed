@@ -29,6 +29,8 @@ export interface ColumnIR {
   enumValues?: string[];
   foreignKey?: { table: string; column: string };
   maxLength?: number;
+  /** Computed/generated column (e.g. Postgres GENERATED ALWAYS AS (...) STORED). Cannot be inserted; omitted from output. */
+  isGenerated?: boolean;
 }
 
 export interface TableIR {

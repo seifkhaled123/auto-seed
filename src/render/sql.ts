@@ -34,7 +34,7 @@ export function renderSql(
   for (const table of orderedTables) {
     const rows = dataset.get(table.name) ?? [];
     if (rows.length === 0) continue;
-    const cols = table.columns.map((c) => c.name);
+    const cols = table.columns.filter((c) => !c.isGenerated).map((c) => c.name);
     out.push(`-- ${table.name}: ${rows.length} row${rows.length === 1 ? "" : "s"}`);
     out.push(
       `INSERT INTO ${quoteIdent(table.name, dialect)} (${cols

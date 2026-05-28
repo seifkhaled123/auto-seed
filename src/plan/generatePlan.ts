@@ -20,15 +20,51 @@ export interface GeneratePlanResult {
   usage: TokenUsage;
 }
 
+// Above this many tables, generate the plan in chunks so a single LLM response
+// can't exceed the model's output-token ceiling (which truncates the JSON).
+const CHUNK_SIZE = 8;
+
 export async function generatePlan(
   provider: LLMProvider,
   input: GeneratePlanInput,
 ): Promise<GeneratePlanResult> {
+  const allTables = input.ir.tables.map((t) => t.name);
+
+  if (allTables.length <= CHUNK_SIZE) {
+    return generateForTables(provider, input);
+  }
+
+  // Large schema: generate per-chunk, each with the full schema as FK context.
+  log.debug(`[plan] ${allTables.length} tables — generating in chunks of ${CHUNK_SIZE}`);
+  const usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+  const seenTables = new Set<string>();
+  const mergedTables: SeedPlan["tables"] = [];
+  for (let i = 0; i < allTables.length; i += CHUNK_SIZE) {
+    const subset = allTables.slice(i, i + CHUNK_SIZE);
+    const r = await generateForTables(provider, input, subset);
+    usage.inputTokens += r.usage.inputTokens;
+    usage.outputTokens += r.usage.outputTokens;
+    for (const t of r.plan.tables) {
+      if (!seenTables.has(t.table)) {
+        seenTables.add(t.table);
+        mergedTables.push(t);
+      }
+    }
+  }
+  const plan: SeedPlan = { version: 1, generationOrder: allTables, tables: mergedTables };
+  return { plan, usage };
+}
+
+async function generateForTables(
+  provider: LLMProvider,
+  input: GeneratePlanInput,
+  onlyTables?: string[],
+): Promise<GeneratePlanResult> {
   const maxTokens = input.maxTokens ?? 8000;
 
   const ask = async (extraError?: string) => {
-    const user = buildUserPrompt({ ...input, extraValidationError: extraError });
-    log.debug(`[plan] sending prompt to ${provider.name}/${provider.model} (~${user.length} chars)`);
+    const user = buildUserPrompt({ ...input, onlyTables, extraValidationError: extraError });
+    log.debug(`[plan] sending prompt to ${provider.name}/${provider.model} (~${user.length} chars)${onlyTables ? ` for ${onlyTables.length} tables` : ""}`);
     const res = await provider.generateJSON({
       system: SYSTEM_PROMPT,
       user,

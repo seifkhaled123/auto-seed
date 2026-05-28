@@ -112,6 +112,17 @@ export async function parseSchema(input: ParseInput): Promise<SchemaIR> {
 }
 
 async function dispatchSingle(filePath: string, dialect?: SqlDialect): Promise<SchemaIR> {
+  // A directory → treat as a set of TypeORM entity files (so cross-file relations resolve).
+  if (fs.statSync(filePath).isDirectory()) {
+    const entities: string[] = [];
+    walk(filePath, (f) => {
+      if (f.endsWith(".entity.ts")) entities.push(f);
+    });
+    if (entities.length === 0) {
+      throw new CLIError(`No .entity.ts files found under ${filePath}.`, 2);
+    }
+    return parseTypeOrmEntities(entities);
+  }
   const ext = path.extname(filePath).toLowerCase();
   if (ext === ".prisma") return parsePrismaSchema(filePath);
   if (ext === ".sql") return parseSqlSchema(filePath, dialect ?? "postgresql");

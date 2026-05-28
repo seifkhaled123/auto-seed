@@ -44,7 +44,7 @@ const PRISMA_TO_KIND: Record<string, ScalarKind> = {
   Boolean: "boolean",
   DateTime: "datetime",
   Json: "json",
-  Bytes: "unknown",
+  Bytes: "string",
 };
 
 export async function parsePrismaSchema(filePath: string): Promise<SchemaIR> {

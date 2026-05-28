@@ -123,7 +123,8 @@ function generateRowsForTable(g: GenInput): RowData[] {
   );
 
   // Build column processing order: PK first → FK next → scalars last.
-  const ordered = orderColumns(table);
+  // Generated/computed columns are derived by the DB and cannot be inserted — skip them.
+  const ordered = orderColumns(table).filter((c) => !c.isGenerated);
 
   // Track uniqueness sets (single + composite).
   const uniqueSingles = new Map<string, Set<string>>();

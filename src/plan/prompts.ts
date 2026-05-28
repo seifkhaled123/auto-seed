@@ -52,10 +52,12 @@ export interface BuildUserPromptInput {
   locale?: string;
   hint?: string;
   extraValidationError?: string;
+  /** When set, ask the model to output plans ONLY for these tables (the rest are context). */
+  onlyTables?: string[];
 }
 
 export function buildUserPrompt(input: BuildUserPromptInput): string {
-  const { ir, rowCounts, defaultRowCount, locale, hint, extraValidationError } = input;
+  const { ir, rowCounts, defaultRowCount, locale, hint, extraValidationError, onlyTables } = input;
   const parts: string[] = [];
   parts.push(serializeSchemaForLLM(ir));
   parts.push("");
@@ -63,6 +65,12 @@ export function buildUserPrompt(input: BuildUserPromptInput): string {
   for (const t of ir.tables) {
     const n = rowCounts[t.name] ?? defaultRowCount;
     parts.push(`  ${t.name}: ${n}`);
+  }
+  if (onlyTables && onlyTables.length > 0) {
+    parts.push("");
+    parts.push(
+      `Output Seed Plan entries ONLY for these tables (use the full schema above for foreign-key context, but do not emit plans for other tables): ${onlyTables.join(", ")}`,
+    );
   }
   if (locale) {
     parts.push("");
