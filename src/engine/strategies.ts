@@ -122,6 +122,28 @@ const FAKER_V9_TO_V10: Record<string, string> = {
   "address.timeZone": "location.timeZone",
   "phone.phoneNumber": "phone.number",
   "phone.phoneNumberFormat": "phone.number",
+  // random helpers → helpers module
+  "random.arrayElement": "helpers.arrayElement",
+  "random.arrayElements": "helpers.arrayElements",
+  "random.shuffle": "helpers.shuffle",
+  "random.objectElement": "helpers.objectEntry",
+  // string.* that aren't real faker v10 string methods
+  "string.word": "lorem.word",
+  "string.words": "lorem.words",
+  "string.sentence": "lorem.sentence",
+  "string.sentences": "lorem.sentences",
+  "string.paragraph": "lorem.paragraph",
+  "string.text": "lorem.text",
+  "string.slug": "lorem.slug",
+  // slugs
+  "commerce.slug": "lorem.slug",
+  "helpers.slugify": "lorem.slug",
+  "slugify": "lorem.slug",
+  "lorem.slugify": "lorem.slug",
+  // misc LLM hallucinations
+  "internet.domainWord": "internet.domainWord", // valid but keep for clarity
+  "company.companyName": "company.name",
+  "company.catchPhrase": "company.catchPhrase",
 };
 
 function callFaker(faker: Faker, dotted: string, args?: unknown[]): RowValue {
