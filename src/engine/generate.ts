@@ -296,6 +296,10 @@ function produceValue(args: ProduceArgs): RowValue {
       v = applyStrategy(defaultStrategyForColumn(col), ctx);
     }
 
+    // Coerce to the column's declared numeric kind when the strategy produced a
+    // mismatched type (e.g. lorem.words fallback on a bigint column).
+    v = coerceToColumnKind(v, col);
+
     // For string-max enforcement (best effort)
     if (typeof v === "string" && col.maxLength && v.length > col.maxLength) {
       v = v.slice(0, col.maxLength);
@@ -511,6 +515,43 @@ function validateIntegrity(ir: SchemaIR, dataset: Dataset) {
     }
   }
   log.debug("[engine] integrity check passed");
+}
+
+/**
+ * Coerces a strategy-produced value to the column's declared kind when they
+ * mismatch. Prevents lorem-word strings ending up in INT columns, and caps
+ * MySQL INT values to the signed 32-bit range so they don't overflow on insert.
+ */
+function coerceToColumnKind(v: RowValue, col: ColumnIR): RowValue {
+  if (v === null) return null;
+
+  if (col.kind === "int" || col.kind === "bigint") {
+    if (typeof v === "bigint") return v;
+    if (typeof v === "number") {
+      if (!Number.isFinite(v)) return 0;
+      const int = Math.trunc(v);
+      if (col.kind === "int") return Math.max(-2_147_483_648, Math.min(2_147_483_647, int));
+      return int;
+    }
+    if (typeof v === "boolean") return v ? 1 : 0;
+    if (typeof v === "string") {
+      const n = parseInt(v, 10);
+      return Number.isNaN(n) ? 0 : n;
+    }
+    return 0;
+  }
+
+  if (col.kind === "float" || col.kind === "decimal") {
+    if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+    if (typeof v === "string") {
+      const n = parseFloat(v);
+      return Number.isNaN(n) ? 0 : n;
+    }
+    if (typeof v === "boolean") return v ? 1 : 0;
+    return 0;
+  }
+
+  return v;
 }
 
 /**

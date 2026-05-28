@@ -141,7 +141,8 @@ const FAKER_V9_TO_V10: Record<string, string> = {
   "slugify": "lorem.slug",
   "lorem.slugify": "lorem.slug",
   // misc LLM hallucinations
-  "internet.domainWord": "internet.domainWord", // valid but keep for clarity
+  "internet.domainWord": "internet.domainWord",
+  "internet.rss": "internet.url",
   "company.companyName": "company.name",
   "company.catchPhrase": "company.catchPhrase",
 };
