@@ -22,10 +22,10 @@ export async function listModels(provider: ProviderName, apiKey: string): Promis
   if (provider === "gemini") {
     const client = new GoogleGenAI({ apiKey });
     const models: string[] = [];
-    for await (const m of client.models.list()) {
+    const pager = await client.models.list();
+    for await (const m of pager) {
       const id = (m.name ?? "").replace(/^models\//, "");
-      const actions: string[] = (m as { supportedActions?: string[] }).supportedActions ?? [];
-      if (id && actions.includes("generateContent")) {
+      if (id && (m.supportedActions ?? []).includes("generateContent")) {
         models.push(id);
       }
     }
