@@ -1,0 +1,446 @@
+// ============================================================
+// Gaming Platform — Prisma Schema
+// Covers: Json @default("{}"), @@id junction, @@unique multi-col,
+// @@index on enum fields, Decimal for real-money, Bytes for assets,
+// in-game economy with balance tracking, self-ref clan hierarchy.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ─────────────────────────────────────────────────────
+
+enum MatchStatus {
+  LOBBY
+  STARTING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  ABANDONED
+}
+
+enum CurrencyType {
+  SOFT    // earned in-game (coins, xp)
+  HARD    // purchased with real money (gems, tokens)
+}
+
+enum TransactionType {
+  EARN
+  SPEND
+  PURCHASE
+  REFUND
+  GIFT
+  ADMIN_GRANT
+  ADMIN_DEDUCT
+  EXPIRE
+}
+
+enum ItemRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+  MYTHIC
+}
+
+enum ItemType {
+  COSMETIC
+  CONSUMABLE
+  EQUIPMENT
+  LOOT_BOX
+  BUNDLE
+  CURRENCY_PACK
+  SEASON_PASS
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  ACTIONED
+  DISMISSED
+}
+
+// ── Players ───────────────────────────────────────────────────
+
+model Player {
+  id              String   @id @default(uuid())
+  username        String   @unique @db.VarChar(32)
+  displayName     String   @map("display_name") @db.VarChar(64)
+  email           String   @unique @db.VarChar(320)
+  passwordHash    String   @map("password_hash") @db.VarChar(255)
+  avatarUrl       String?  @map("avatar_url")
+  avatarData      Bytes?   @map("avatar_data")   // cached thumbnail
+  bio             String?  @db.VarChar(500)
+  countryCode     String?  @map("country_code") @db.Char(2)
+  level           Int      @default(1)
+  xp              BigInt   @default(0)
+  softCurrency    Int      @default(0) @map("soft_currency")     // coins
+  hardCurrency    Int      @default(0) @map("hard_currency")     // gems
+  stats           Json     @default("{}") @map("stats")          // {wins, losses, kills, etc.}
+  preferences     Json     @default("{}") @map("preferences")
+  equippedLoadout Json?    @map("equipped_loadout")
+  isOnline        Boolean  @default(false) @map("is_online")
+  lastSeenAt      DateTime? @map("last_seen_at")
+  bannedUntil     DateTime? @map("banned_until")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  matchPlayers        MatchPlayer[]
+  achievements        PlayerAchievement[]
+  inventoryItems      PlayerInventory[]
+  currencyTransactions CurrencyTransaction[]
+  purchases           Purchase[]
+  leaderboardEntries  LeaderboardEntry[]
+  clanMemberships     ClanMember[]
+  reportsGiven        PlayerReport[] @relation("ReportReporter")
+  reportsReceived     PlayerReport[] @relation("ReportTarget")
+
+  @@index([username])
+  @@index([level, xp(sort: Desc)])
+  @@map("players")
+}
+
+// ── Games & Seasons ───────────────────────────────────────────
+
+model Game {
+  id          String  @id @default(cuid())
+  name        String  @unique @db.VarChar(200)
+  slug        String  @unique @db.VarChar(200)
+  description String? @db.VarChar(2000)
+  coverUrl    String? @map("cover_url")
+  iconUrl     String? @map("icon_url")
+  minPlayers  Int     @default(1) @map("min_players")
+  maxPlayers  Int     @default(10) @map("max_players")
+  config      Json    @default("{}") @map("config")
+  isActive    Boolean @default(true) @map("is_active")
+  releasedAt  DateTime? @map("released_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  seasons      Season[]
+  matches      Match[]
+  leaderboards Leaderboard[]
+  items        Item[]
+
+  @@map("games")
+}
+
+model Season {
+  id         String    @id @default(cuid())
+  gameId     String    @map("game_id")
+  name       String    @db.VarChar(200)
+  number     Int
+  startsAt   DateTime  @map("starts_at")
+  endsAt     DateTime  @map("ends_at")
+  isActive   Boolean   @default(false) @map("is_active")
+  config     Json      @default("{}") @map("config")
+  rewards    Json      @default("[]") @map("rewards")  // season pass rewards
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  game         Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  matches      Match[]
+  leaderboards Leaderboard[]
+
+  @@unique([gameId, number])
+  @@map("seasons")
+}
+
+// ── Matches ───────────────────────────────────────────────────
+
+model Match {
+  id          String      @id @default(uuid())
+  gameId      String      @map("game_id")
+  seasonId    String?     @map("season_id")
+  status      MatchStatus @default(LOBBY)
+  mode        String      @db.VarChar(50)  // 'ranked','casual','tournament'
+  region      String      @db.VarChar(50)
+  serverUrl   String?     @map("server_url")
+  config      Json        @default("{}") @map("config")
+  result      Json?       @map("result")  // final match result snapshot
+  startedAt   DateTime?   @map("started_at")
+  endedAt     DateTime?   @map("ended_at")
+  durationSec Int?        @map("duration_sec")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  game    Game     @relation(fields: [gameId], references: [id])
+  season  Season?  @relation(fields: [seasonId], references: [id])
+  players MatchPlayer[]
+
+  @@index([gameId, status])
+  @@index([seasonId, createdAt(sort: Desc)])
+  @@map("matches")
+}
+
+model MatchPlayer {
+  matchId      String  @map("match_id")
+  playerId     String  @map("player_id")
+  team         Int?
+  placement    Int?    // final rank in match
+  score        Int     @default(0)
+  kills        Int     @default(0)
+  deaths       Int     @default(0)
+  assists      Int     @default(0)
+  stats        Json    @default("{}") @map("stats")
+  softEarned   Int     @default(0) @map("soft_earned")   // coins earned this match
+  xpEarned     Int     @default(0) @map("xp_earned")
+  loadout      Json?   @map("loadout")  // snapshot of equipped items
+
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, playerId])
+  @@map("match_players")
+}
+
+// ── Achievements ─────────────────────────────────────────────
+
+model Achievement {
+  id          String  @id @default(cuid())
+  gameId      String? @map("game_id")
+  name        String  @db.VarChar(200)
+  description String  @db.VarChar(1000)
+  iconUrl     String? @map("icon_url")
+  iconData    Bytes?  @map("icon_data")
+  points      Int     @default(0)
+  isSecret    Boolean @default(false) @map("is_secret")
+  isRepeatable Boolean @default(false) @map("is_repeatable")
+  criteria    Json    @default("{}") @map("criteria")  // unlock conditions
+  reward      Json?   @map("reward")  // items/currency granted on unlock
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  players PlayerAchievement[]
+
+  @@map("achievements")
+}
+
+model PlayerAchievement {
+  playerId      String   @map("player_id")
+  achievementId String   @map("achievement_id")
+  progress      Json     @default("{}") @map("progress")
+  isUnlocked    Boolean  @default(false) @map("is_unlocked")
+  unlockedAt    DateTime? @map("unlocked_at")
+  count         Int      @default(0)  // for repeatable achievements
+
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@id([playerId, achievementId])
+  @@map("player_achievements")
+}
+
+// ── Leaderboards ──────────────────────────────────────────────
+
+model Leaderboard {
+  id       String @id @default(cuid())
+  gameId   String @map("game_id")
+  seasonId String? @map("season_id")
+  scope    String @db.VarChar(50)  // 'global', 'regional', 'friends', 'guild'
+  metric   String @db.VarChar(100) // 'score', 'wins', 'kills', 'xp'
+  period   String @db.VarChar(20)  // 'all_time', 'season', 'weekly', 'daily'
+  lastResetAt DateTime? @map("last_reset_at")
+  nextResetAt DateTime? @map("next_reset_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  game    Game    @relation(fields: [gameId], references: [id])
+  season  Season? @relation(fields: [seasonId], references: [id])
+  entries LeaderboardEntry[]
+
+  @@unique([gameId, seasonId, scope, metric, period])
+  @@map("leaderboards")
+}
+
+model LeaderboardEntry {
+  leaderboardId String @map("leaderboard_id")
+  playerId      String @map("player_id")
+  rank          Int
+  score         BigInt
+  metadata      Json   @default("{}") @map("metadata")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  leaderboard Leaderboard @relation(fields: [leaderboardId], references: [id], onDelete: Cascade)
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([leaderboardId, playerId])
+  @@unique([leaderboardId, rank])
+  @@map("leaderboard_entries")
+}
+
+// ── In-game Economy ───────────────────────────────────────────
+
+model Item {
+  id          String     @id @default(cuid())
+  gameId      String?    @map("game_id")
+  sku         String     @unique @db.VarChar(100)
+  name        String     @db.VarChar(200)
+  description String?    @db.VarChar(2000)
+  type        ItemType
+  rarity      ItemRarity @default(COMMON)
+  iconUrl     String?    @map("icon_url")
+  iconData    Bytes?     @map("icon_data")
+  attributes  Json       @default("{}") @map("attributes")
+  tags        String[]
+  isActive    Boolean    @default(true) @map("is_active")
+  isGiftable  Boolean    @default(true) @map("is_giftable")
+  isTradable  Boolean    @default(false) @map("is_tradable")
+  sortOrder   Int        @default(0) @map("sort_order")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  game      Game?            @relation(fields: [gameId], references: [id])
+  players   PlayerInventory[]
+  purchases PurchaseItem[]
+  prices    ItemPrice[]
+
+  @@map("items")
+}
+
+model ItemPrice {
+  id           String       @id @default(cuid())
+  itemId       String       @map("item_id")
+  currencyType CurrencyType @map("currency_type")
+  amount       Int
+  realPrice    Decimal?     @map("real_price") @db.Decimal(10, 2) // USD for hard currency packs
+  currency     String       @default("USD") @db.Char(3)
+  isActive     Boolean      @default(true) @map("is_active")
+  validFrom    DateTime     @default(now()) @map("valid_from")
+  validUntil   DateTime?    @map("valid_until")
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, currencyType])
+  @@map("item_prices")
+}
+
+model PlayerInventory {
+  playerId   String    @map("player_id")
+  itemId     String    @map("item_id")
+  quantity   Int       @default(1)
+  isEquipped Boolean   @default(false) @map("is_equipped")
+  metadata   Json?     @map("metadata")
+  acquiredAt DateTime  @default(now()) @map("acquired_at")
+  expiresAt  DateTime? @map("expires_at")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  @@id([playerId, itemId])
+  @@map("player_inventory")
+}
+
+model CurrencyTransaction {
+  id           String          @id @default(uuid())
+  playerId     String          @map("player_id")
+  type         TransactionType
+  currencyType CurrencyType    @map("currency_type")
+  amount       Int
+  balanceBefore Int            @map("balance_before")
+  balanceAfter  Int            @map("balance_after")
+  reason       String          @db.VarChar(200)
+  referenceId  String?         @map("reference_id")  // match_id, purchase_id, etc.
+  metadata     Json?
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, currencyType, createdAt(sort: Desc)])
+  @@map("currency_transactions")
+}
+
+model Purchase {
+  id              String   @id @default(uuid())
+  playerId        String   @map("player_id")
+  status          String   @db.VarChar(30)  // 'pending','completed','refunded'
+  gateway         String   @db.VarChar(50)  // 'stripe','apple','google'
+  gatewayOrderId  String?  @unique @map("gateway_order_id")
+  totalAmount     Decimal  @map("total_amount") @db.Decimal(10, 2)
+  currency        String   @db.Char(3)
+  receiptUrl      String?  @map("receipt_url")
+  metadata        Json?
+  refundedAt      DateTime? @map("refunded_at")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  player Player         @relation(fields: [playerId], references: [id])
+  items  PurchaseItem[]
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String  @id @default(cuid())
+  purchaseId String  @map("purchase_id")
+  itemId     String  @map("item_id")
+  quantity   Int     @default(1)
+  unitPrice  Decimal @map("unit_price") @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id])
+
+  @@map("purchase_items")
+}
+
+// ── Clans (self-ref for sub-clans) ────────────────────────────
+
+model Clan {
+  id          String    @id @default(cuid())
+  parentId    String?   @map("parent_id")
+  name        String    @unique @db.VarChar(100)
+  tag         String    @unique @db.VarChar(10)  // short display tag [TAG]
+  description String?   @db.VarChar(1000)
+  logoUrl     String?   @map("logo_url")
+  logoData    Bytes?    @map("logo_data")
+  minLevel    Int       @default(1) @map("min_level")
+  isPublic    Boolean   @default(true) @map("is_public")
+  memberCount Int       @default(0) @map("member_count")
+  totalXp     BigInt    @default(0) @map("total_xp")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  parent   Clan?    @relation("ClanHierarchy", fields: [parentId], references: [id])
+  children Clan[]   @relation("ClanHierarchy")
+  members  ClanMember[]
+
+  @@map("clans")
+}
+
+model ClanMember {
+  clanId    String   @map("clan_id")
+  playerId  String   @map("player_id")
+  role      String   @default("member") @db.VarChar(30)  // 'leader','officer','member'
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  clan   Clan   @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([clanId, playerId])
+  @@map("clan_members")
+}
+
+// ── Moderation ────────────────────────────────────────────────
+
+model PlayerReport {
+  id          String       @id @default(cuid())
+  reporterId  String       @map("reporter_id")
+  targetId    String       @map("target_id")
+  reason      String       @db.VarChar(100)
+  description String?      @db.Text
+  matchId     String?      @map("match_id")
+  evidence    Json?
+  status      ReportStatus @default(PENDING)
+  resolvedBy  String?      @map("resolved_by")
+  resolvedAt  DateTime?    @map("resolved_at")
+  resolution  String?      @db.VarChar(500)
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  reporter Player @relation("ReportReporter", fields: [reporterId], references: [id])
+  target   Player @relation("ReportTarget",   fields: [targetId],   references: [id])
+
+  @@index([targetId, status])
+  @@map("player_reports")
+}

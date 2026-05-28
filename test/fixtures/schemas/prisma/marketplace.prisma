@@ -1,0 +1,445 @@
+// ============================================================
+// Two-Sided Marketplace (Airbnb / Etsy-like) — Prisma Schema
+// Covers: Unsupported("geometry"), Unsupported("daterange"),
+// Decimal @db.Decimal(19,4), @db.Char(3) currency, @db.Text,
+// polymorphic review (targetType + targetId), @@index poly,
+// @default(dbgenerated("now()")), multi-currency amounts.
+// ============================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, pgcrypto]
+}
+
+// ── Enums ─────────────────────────────────────────────────────
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+  PENDING_VERIFICATION
+}
+
+enum SellerStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  PAUSED
+  SOLD_OUT
+  ARCHIVED
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  DISPUTED
+  REFUNDED
+}
+
+enum TransactionType {
+  BOOKING_PAYMENT
+  BOOKING_REFUND
+  PAYOUT
+  PAYOUT_REVERSAL
+  PLATFORM_FEE
+  DISPUTE_RESOLUTION
+  ADJUSTMENT
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_BUYER
+  RESOLVED_SELLER
+  ESCALATED
+  CLOSED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  BOOKING_REQUEST
+  BOOKING_CONFIRMATION
+  SYSTEM
+}
+
+// ── Users ─────────────────────────────────────────────────────
+
+model User {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String     @unique @db.VarChar(320)
+  emailVerified   Boolean    @default(false) @map("email_verified")
+  phone           String?    @db.VarChar(30)
+  phoneVerified   Boolean    @default(false) @map("phone_verified")
+  firstName       String     @map("first_name") @db.VarChar(120)
+  lastName        String     @map("last_name") @db.VarChar(120)
+  avatarUrl       String?    @map("avatar_url")
+  bio             String?    @db.Text
+  preferredLocale String     @default("en") @map("preferred_locale") @db.VarChar(10)
+  preferredCurrency String   @default("USD") @map("preferred_currency") @db.Char(3)
+  status          UserStatus @default(ACTIVE)
+  idVerifiedAt    DateTime?  @map("id_verified_at")
+  deletedAt       DateTime?  @map("deleted_at")
+  createdAt       DateTime   @default(dbgenerated("now()")) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  sellerProfile   SellerProfile?
+  buyerProfile    BuyerProfile?
+  conversations   ConversationParticipant[]
+  sentMessages    Message[]      @relation("MessageSender")
+  transactions    Transaction[]  @relation("TransactionUser")
+  disputes        Dispute[]      @relation("DisputeClaimant")
+  reviewsGiven    Review[]       @relation("ReviewAuthor")
+
+  @@map("users")
+}
+
+model SellerProfile {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String       @unique @map("user_id") @db.Uuid
+  shopName        String       @unique @map("shop_name") @db.VarChar(200)
+  shopSlug        String       @unique @map("shop_slug") @db.VarChar(200)
+  description     String?      @db.Text
+  logoUrl         String?      @map("logo_url")
+  bannerUrl       String?      @map("banner_url")
+  status          SellerStatus @default(PENDING)
+  stripeAccountId String?      @unique @map("stripe_account_id")
+  payoutEnabled   Boolean      @default(false) @map("payout_enabled")
+  totalSales      Decimal      @default(0) @map("total_sales") @db.Decimal(19, 4)
+  currency        String       @default("USD") @db.Char(3)
+  avgRating       Decimal?     @map("avg_rating") @db.Decimal(3, 2)
+  reviewCount     Int          @default(0) @map("review_count")
+  policies        Json?
+  createdAt       DateTime     @default(dbgenerated("now()")) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings  Listing[]
+  payouts   Payout[]
+
+  @@map("seller_profiles")
+}
+
+model BuyerProfile {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @unique @map("user_id") @db.Uuid
+  shippingName    String?  @map("shipping_name") @db.VarChar(255)
+  shippingAddress String?  @map("shipping_address") @db.Text
+  shippingCity    String?  @map("shipping_city") @db.VarChar(200)
+  shippingCountry String?  @map("shipping_country") @db.Char(2)
+  totalSpent      Decimal  @default(0) @map("total_spent") @db.Decimal(19, 4)
+  orderCount      Int      @default(0) @map("order_count")
+  createdAt       DateTime @default(dbgenerated("now()")) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@map("buyer_profiles")
+}
+
+// ── Categories ────────────────────────────────────────────────
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  parentId    Int?      @map("parent_id")
+  name        String    @db.VarChar(200)
+  slug        String    @unique @db.VarChar(200)
+  description String?   @db.Text
+  imageUrl    String?   @map("image_url")
+  isActive    Boolean   @default(true) @map("is_active")
+  sortOrder   Int       @default(0) @map("sort_order")
+
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  listings  Listing[]
+
+  @@map("categories")
+}
+
+// ── Listings ─────────────────────────────────────────────────
+
+model Listing {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId      String        @map("seller_id") @db.Uuid
+  categoryId    Int?          @map("category_id")
+  title         String        @db.VarChar(500)
+  description   String        @db.Text
+  price         Decimal       @db.Decimal(19, 4)
+  currency      String        @default("USD") @db.Char(3)
+  quantity      Int           @default(1)
+  status        ListingStatus @default(DRAFT)
+  isFeatured    Boolean       @default(false) @map("is_featured")
+  viewCount     Int           @default(0) @map("view_count")
+  favoriteCount Int           @default(0) @map("favorite_count")
+  avgRating     Decimal?      @map("avg_rating") @db.Decimal(3, 2)
+  reviewCount   Int           @default(0) @map("review_count")
+  tags          String[]
+  metadata      Json?
+
+  // PostGIS geometry — Unsupported because Prisma has no native PostGIS type
+  coordinates   Unsupported("geometry(Point,4326)")?
+
+  locationName  String?  @map("location_name") @db.VarChar(300)
+  country       String?  @db.Char(2)
+  city          String?  @db.VarChar(200)
+  processingDays Int?    @map("processing_days")
+  shipsFrom     String?  @map("ships_from") @db.Char(2)
+  shipsTo       String[] @map("ships_to")
+
+  publishedAt   DateTime? @map("published_at")
+  deletedAt     DateTime? @map("deleted_at")
+  createdAt     DateTime  @default(dbgenerated("now()")) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  seller       SellerProfile     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category     Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  images       ListingImage[]
+  availability ListingAvailability[]
+  bookingItems BookingItem[]
+
+  @@index([sellerId, status])
+  @@index([categoryId, status])
+  @@map("listings")
+}
+
+model ListingImage {
+  id         String  @id @default(cuid())
+  listingId  String  @map("listing_id") @db.Uuid
+  url        String
+  altText    String? @map("alt_text") @db.VarChar(500)
+  width      Int?
+  height     Int?
+  position   Int     @default(0)
+  isPrimary  Boolean @default(false) @map("is_primary")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("listing_images")
+}
+
+model ListingAvailability {
+  id          Int     @id @default(autoincrement())
+  listingId   String  @map("listing_id") @db.Uuid
+
+  // PostgreSQL daterange — Unsupported because Prisma has no native range type
+  period      Unsupported("daterange") @map("period")
+
+  isBlocked   Boolean @default(true) @map("is_blocked")
+  reason      String? @db.VarChar(200)
+  price       Decimal? @db.Decimal(19, 4)  // override price for this period
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_availability")
+}
+
+// ── Bookings ─────────────────────────────────────────────────
+
+model Booking {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  buyerProfileId String       @map("buyer_profile_id") @db.Uuid
+  status        BookingStatus @default(PENDING)
+  subtotal      Decimal       @db.Decimal(19, 4)
+  platformFee   Decimal       @map("platform_fee") @db.Decimal(19, 4)
+  sellerFee     Decimal       @map("seller_fee") @db.Decimal(19, 4)
+  tax           Decimal       @default(0) @db.Decimal(19, 4)
+  total         Decimal       @db.Decimal(19, 4)
+  currency      String        @default("USD") @db.Char(3)
+  shippingName  String?       @map("shipping_name") @db.VarChar(255)
+  shippingAddress String?     @map("shipping_address") @db.Text
+  buyerNote     String?       @map("buyer_note") @db.Text
+  trackingNumber String?      @map("tracking_number")
+  trackingUrl   String?       @map("tracking_url")
+  cancelledAt   DateTime?     @map("cancelled_at")
+  cancelReason  String?       @map("cancel_reason") @db.Text
+  completedAt   DateTime?     @map("completed_at")
+  createdAt     DateTime      @default(dbgenerated("now()")) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  buyer        BuyerProfile  @relation(fields: [buyerProfileId], references: [id])
+  items        BookingItem[]
+  transactions Transaction[]
+  dispute      Dispute?
+
+  @@map("bookings")
+}
+
+model BookingItem {
+  id          String  @id @default(cuid())
+  bookingId   String  @map("booking_id") @db.Uuid
+  listingId   String  @map("listing_id") @db.Uuid
+  listingTitle String @map("listing_title") @db.VarChar(500)  // snapshot
+  quantity    Int     @default(1)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(19, 4)
+  total       Decimal @db.Decimal(19, 4)
+  currency    String  @db.Char(3)
+  metadata    Json?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@map("booking_items")
+}
+
+// ── Reviews (polymorphic target) ──────────────────────────────
+
+model Review {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorId    String   @map("author_id") @db.Uuid
+  targetType  String   @map("target_type") @db.VarChar(50)  // 'listing', 'seller', 'buyer'
+  targetId    String   @map("target_id") @db.Uuid
+  rating      Int      // 1–5
+  title       String?  @db.VarChar(255)
+  body        String?  @db.Text
+  isVerified  Boolean  @default(false) @map("is_verified")
+  response    String?  @db.Text  // seller response
+  respondedAt DateTime? @map("responded_at")
+  publishedAt DateTime? @map("published_at")
+  createdAt   DateTime @default(dbgenerated("now()")) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  author User @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, targetId])
+  @@index([authorId])
+  @@map("reviews")
+}
+
+// ── Messaging ────────────────────────────────────────────────
+
+model Conversation {
+  id          String   @id @default(cuid())
+  bookingId   String?  @unique @map("booking_id") @db.Uuid
+  subject     String?  @db.VarChar(500)
+  lastMsgAt   DateTime? @map("last_msg_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String   @map("conversation_id")
+  userId         String   @map("user_id") @db.Uuid
+  joinedAt       DateTime @default(now()) @map("joined_at")
+  lastReadAt     DateTime? @map("last_read_at")
+  isArchived     Boolean  @default(false) @map("is_archived")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String      @map("conversation_id")
+  senderId       String      @map("sender_id") @db.Uuid
+  type           MessageType @default(TEXT)
+  body           String?     @db.Text
+  mediaUrl       String?     @map("media_url")
+  metadata       Json?
+  deletedAt      DateTime?   @map("deleted_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+// ── Payments ─────────────────────────────────────────────────
+
+model Transaction {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId       String?           @map("booking_id") @db.Uuid
+  userId          String            @map("user_id") @db.Uuid
+  type            TransactionType
+  status          TransactionStatus @default(PENDING)
+  amount          Decimal           @db.Decimal(19, 4)
+  currency        String            @db.Char(3)
+  exchangeRate    Decimal?          @map("exchange_rate") @db.Decimal(12, 6)
+  gatewayId       String?           @map("gateway_id")
+  gatewayResponse Json?             @map("gateway_response")
+  metadata        Json?
+  processedAt     DateTime?         @map("processed_at")
+  createdAt       DateTime          @default(dbgenerated("now()")) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  booking  Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  user     User     @relation("TransactionUser", fields: [userId], references: [id], onDelete: Cascade)
+  payout   Payout?  @relation(fields: [payoutId], references: [id])
+  payoutId String?  @map("payout_id") @db.Uuid
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([bookingId])
+  @@map("transactions")
+}
+
+model Payout {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId        String   @map("seller_id") @db.Uuid
+  amount          Decimal  @db.Decimal(19, 4)
+  currency        String   @db.Char(3)
+  status          String   @db.VarChar(30)
+  gatewayPayoutId String?  @unique @map("gateway_payout_id")
+  arrivedAt       DateTime? @map("arrived_at")
+  createdAt       DateTime @default(dbgenerated("now()")) @map("created_at")
+
+  seller       SellerProfile @relation(fields: [sellerId], references: [id])
+  transactions Transaction[]
+
+  @@map("payouts")
+}
+
+// ── Disputes ─────────────────────────────────────────────────
+
+model Dispute {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId   String        @unique @map("booking_id") @db.Uuid
+  claimantId  String        @map("claimant_id") @db.Uuid
+  status      DisputeStatus @default(OPEN)
+  reason      String        @db.VarChar(200)
+  description String        @db.Text
+  evidence    Json?
+  resolution  String?       @db.Text
+  resolvedAt  DateTime?     @map("resolved_at")
+  createdAt   DateTime      @default(dbgenerated("now()")) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  booking   Booking @relation(fields: [bookingId], references: [id])
+  claimant  User    @relation("DisputeClaimant", fields: [claimantId], references: [id])
+
+  @@map("disputes")
+}
