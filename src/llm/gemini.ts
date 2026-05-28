@@ -8,7 +8,7 @@ export class GeminiProvider implements LLMProvider {
   private client: GoogleGenAI;
 
   constructor(apiKey: string, model: string) {
-    this.client = new GoogleGenAI({ apiKey });
+    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 300_000 } });
     this.model = model;
   }
 

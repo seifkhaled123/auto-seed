@@ -8,7 +8,7 @@ export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;
 
   constructor(apiKey: string, model: string) {
-    this.client = new OpenAI({ apiKey, timeout: 120_000 });
+    this.client = new OpenAI({ apiKey, timeout: 300_000 });
     this.model = model;
   }
 

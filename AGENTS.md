@@ -118,10 +118,12 @@ Raw JSON error dumped to user; retried after 1s even on daily-quota exhaustion.
   status (fail fast, no retry), and `RetryInfo.retryDelay` (wait that long, capped 30s, for
   transient 429/5xx).
 
-### OpenAI/Anthropic timeout on large schemas
-60s client timeout was too short for ~4k-token plans on a 12-table schema.
-- Fix: bumped to 120s in `src/llm/{openai,anthropic}.ts`. (Generation latency is ~all API time;
-  `engine time` is <100ms. Reuse a saved plan via `--plan-only` then `--plan <file>` to skip the LLM.)
+### OpenAI/Anthropic/Gemini timeout on large schemas
+Client timeout was too short for large plans. 60s → 120s wasn't enough for big schemas (e.g.
+`hr-payroll.mysql.sql`, ~17 tables) which produce larger plans and time out on gpt-4o-mini.
+- Fix: timeout is 300s (5 min) in all three clients: `src/llm/{openai,anthropic,gemini}.ts`
+  (Gemini uses `httpOptions.timeout`). Generation latency is ~all API time; `engine time` is <100ms.
+  Reuse a saved plan via `--plan-only` then `--plan <file>` to skip the LLM entirely on re-runs.
 
 ### Model selection in `init`
 Replaced manual model typing with a fetched list.

@@ -8,7 +8,7 @@ export class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
 
   constructor(apiKey: string, model: string) {
-    this.client = new Anthropic({ apiKey, timeout: 120_000 });
+    this.client = new Anthropic({ apiKey, timeout: 300_000 });
     this.model = model;
   }
 
