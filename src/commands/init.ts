@@ -10,6 +10,7 @@ import {
 import { configFilePath } from "../config/config.js";
 import { CLIError } from "../util/errors.js";
 import { log, pc } from "../util/logger.js";
+import { listModels } from "../llm/list-models.js";
 
 export function buildInitCommand(): Command {
   return new Command("init")
@@ -64,11 +65,40 @@ export function buildInitCommand(): Command {
       }
 
       const defaultModel = DEFAULT_MODELS[provider];
-      const model = await p.text({
-        message: `Default model for ${provider}?`,
-        initialValue: existing.models?.[provider] ?? defaultModel,
-        placeholder: defaultModel,
-      });
+      const effectiveKey = apiKey ?? envKey ?? "";
+
+      let modelChoices: string[] | null = null;
+      if (effectiveKey) {
+        const s = p.spinner();
+        s.start("Fetching available models…");
+        try {
+          modelChoices = await listModels(provider, effectiveKey);
+          s.stop(`Fetched ${modelChoices.length} models.`);
+        } catch {
+          s.stop("Could not fetch models — you can type the model name manually.");
+        }
+      }
+
+      let model: string | symbol;
+      if (modelChoices && modelChoices.length > 0) {
+        const savedModel = existing.models?.[provider] ?? defaultModel;
+        const initialValue = modelChoices.includes(savedModel) ? savedModel : modelChoices[0];
+        model = (await p.select({
+          message: `Default model for ${provider}?`,
+          options: modelChoices.map((id) => ({
+            value: id,
+            label: id,
+            hint: id === defaultModel ? "recommended" : undefined,
+          })),
+          initialValue,
+        })) as string | symbol;
+      } else {
+        model = await p.text({
+          message: `Default model for ${provider}?`,
+          initialValue: existing.models?.[provider] ?? defaultModel,
+          placeholder: defaultModel,
+        });
+      }
       if (p.isCancel(model)) throw new CLIError("Cancelled.", 1);
 
       const format = (await p.select({
