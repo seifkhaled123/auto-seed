@@ -104,7 +104,9 @@ export async function runGenerate(opts: GenerateOptions): Promise<void> {
     modelLabel = `${rt.provider}/${rt.model}`;
     const provider = makeProvider(rt);
 
-    const spinner = ora({ text: `Designing seed plan with ${modelLabel}…`, stream: process.stderr }).start();
+    const spinner = ora({ text: `Designing seed plan with ${modelLabel}…`, stream: process.stderr, discardStdin: false }).start();
+    const onSigint = () => { spinner.stop(); process.exit(130); };
+    process.once("SIGINT", onSigint);
     try {
       const result = await generatePlan(provider, {
         ir,
@@ -119,6 +121,8 @@ export async function runGenerate(opts: GenerateOptions): Promise<void> {
     } catch (err) {
       spinner.fail("Plan generation failed");
       throw err;
+    } finally {
+      process.off("SIGINT", onSigint);
     }
   }
 
@@ -175,7 +179,9 @@ async function runDirect(args: DirectArgs): Promise<void> {
   const modelLabel = `${rt.provider}/${rt.model}`;
   const provider = makeProvider(rt);
 
-  const spinner = ora({ text: `Generating ${sumValues(rowCounts)} rows with ${modelLabel}…`, stream: process.stderr }).start();
+  const spinner = ora({ text: `Generating ${sumValues(rowCounts)} rows with ${modelLabel}…`, stream: process.stderr, discardStdin: false }).start();
+  const onSigint = () => { spinner.stop(); process.exit(130); };
+  process.once("SIGINT", onSigint);
   let result;
   try {
     result = await runDirectMode(provider, {
@@ -189,6 +195,8 @@ async function runDirect(args: DirectArgs): Promise<void> {
   } catch (err) {
     spinner.fail("direct mode failed");
     throw err;
+  } finally {
+    process.off("SIGINT", onSigint);
   }
 
   const metadata = {
