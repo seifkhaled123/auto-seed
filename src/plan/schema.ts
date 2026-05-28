@@ -83,4 +83,6 @@ Rules:
 - Faker v10 renamed these: use number.int (NOT datatype.number), number.float (NOT datatype.float), internet.username (NOT internet.userName), person.* (NOT name.*), location.* (NOT address.*), string.alphanumeric (NOT random.alphaNumeric), image.url (NOT image.imageUrl), phone.number (NOT phone.phoneNumber), helpers.arrayElement (NOT random.arrayElement), lorem.word (NOT string.word), lorem.slug (NOT commerce.slug or slugify).
 - For boolean columns use { "type": "faker", "method": "datatype.boolean" }. Never use { "type": "boolean" }.
 - Respect nullability: only include nullRatio for nullable columns (0 means never null; 1 means always null).
-- Never include strategies the engine handles: do not hardcode FK ids.`;
+- Never include strategies the engine handles: do not hardcode FK ids.
+- For columns whose name implies a fixed vocabulary (status, type, role, state, visibility, format, taxonomy, mime_type, approved, target), use { "type": "enum" } with realistic values — never lorem/faker text. Example: post_status → ["publish","draft","pending","private"], post_type → ["post","page","attachment"], comment_approved → ["1","0","spam"].
+- For date/datetime columns use faker methods that return Date objects: date.recent, date.past, date.future, date.between.`;

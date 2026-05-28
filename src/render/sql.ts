@@ -83,10 +83,15 @@ function quoteValue(v: RowValue, dialect: SqlDialect): string {
     return String(v);
   }
   if (typeof v === "bigint") return String(v);
-  if (v instanceof Date) return `'${v.toISOString()}'`;
+  if (v instanceof Date) return `'${formatSqlDatetime(v)}'`;
   if (typeof v === "object") return `'${escapeSqlString(JSON.stringify(v), dialect)}'`;
   // string
   return `'${escapeSqlString(String(v), dialect)}'`;
+}
+
+function formatSqlDatetime(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
 
 function escapeSqlString(s: string, _dialect: SqlDialect): string {
