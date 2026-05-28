@@ -314,11 +314,12 @@ function produceValue(args: ProduceArgs): RowValue {
       v = v.slice(0, col.maxLength);
     }
 
-    // A NOT NULL column must never receive null (e.g. an LLM "null" strategy or an
-    // empty FK pool). Substitute a generated non-null default.
-    if (v === null && !col.nullable) {
+    // A NOT NULL column must never receive null/undefined (e.g. an LLM "null" or
+    // value-less "static" strategy, or an empty FK pool). Substitute a default.
+    if ((v === null || v === undefined) && !col.nullable) {
       v = applyStrategy(defaultStrategyForColumn(col), ctx);
       if (!col.foreignKey) v = coerceToColumnKind(v, col);
+      if (v === undefined) v = ""; // last-resort: never emit undefined into NOT NULL
     }
 
     if (isUniqueSingle) {
@@ -486,8 +487,8 @@ function validateIntegrity(ir: SchemaIR, dataset: Dataset) {
           }
         }
       }
-      // FK existence check
-      if (col.foreignKey) {
+      // FK existence check (skip array FKs — elements aren't scalar references here)
+      if (col.foreignKey && !col.isArray) {
         const parentTbl = byName.get(col.foreignKey.table);
         if (!parentTbl) continue;
         const parentVals = new Set(

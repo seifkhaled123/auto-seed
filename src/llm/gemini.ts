@@ -82,7 +82,7 @@ function parseGeminiError(raw: string): { human: string; quotaExhausted: boolean
       };
     };
     const errBody = body.error;
-    const human = (errBody?.message ?? raw).split("\n")[0].trim();
+    const human = (errBody?.message ?? raw).split("\n")[0]?.trim() ?? raw;
     const quotaExhausted = errBody?.status === "RESOURCE_EXHAUSTED";
     const retryInfo = errBody?.details?.find((d) => d["@type"]?.includes("RetryInfo"));
     const retryMs = retryInfo?.retryDelay ? parseFloat(retryInfo.retryDelay) * 1000 : 5_000;
