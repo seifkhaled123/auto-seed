@@ -41,6 +41,7 @@ export async function parseSqlSchema(
     const enumCols = scanEnumTypedColumns(raw, enumTypes); // col → values
     const generatedCols = scanGeneratedColumns(raw); // computed STORED/VIRTUAL cols to omit
     const identityCols = scanIdentityColumns(raw); // GENERATED ... AS IDENTITY cols
+    const arrayCols = scanArrayColumns(raw); // T[] columns
 
     const sanitized = sanitizeCreateTable(raw, enumTypes, domains);
 
@@ -70,6 +71,7 @@ export async function parseSqlSchema(
       }
       if (identityCols.has(c.name)) c.isAutoIncrement = true;
       if (generatedCols.has(c.name)) c.isGenerated = true;
+      if (arrayCols.has(c.name)) c.isArray = true;
     }
     tables.push(tbl);
   }
@@ -231,6 +233,18 @@ function scanGeneratedColumns(stmt: string): Set<string> {
       const m = COLUMN_DEF_START.exec(def);
       if (m) out.add(unquoteIdent(m[1]!));
     }
+  }
+  return out;
+}
+
+function scanArrayColumns(stmt: string): Set<string> {
+  const out = new Set<string>();
+  for (const def of splitColumnDefs(tableBody(stmt))) {
+    if (CONSTRAINT_KEYWORDS.test(def)) continue;
+    const m = COLUMN_DEF_START.exec(def);
+    if (!m) continue;
+    const typeTok = def.slice(m[0].length).split(/\s/)[0] ?? "";
+    if (/\[\]/.test(typeTok)) out.add(unquoteIdent(m[1]!));
   }
   return out;
 }

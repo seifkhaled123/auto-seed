@@ -42,6 +42,7 @@ function literal(v: RowValue): string {
   }
   if (typeof v === "bigint") return `${v}n`;
   if (v instanceof Date) return `new Date(${JSON.stringify(v.toISOString())})`;
+  if (Array.isArray(v)) return JSON.stringify(v);
   if (typeof v === "object") return JSON.stringify(v);
   return JSON.stringify(String(v));
 }

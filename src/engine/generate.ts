@@ -126,9 +126,13 @@ function generateRowsForTable(g: GenInput): RowData[] {
   // Generated/computed columns are derived by the DB and cannot be inserted — skip them.
   const ordered = orderColumns(table).filter((c) => !c.isGenerated);
 
-  // Track uniqueness sets (single + composite).
+  // Track uniqueness sets (single + composite). A single-column PK is also tracked
+  // so that a PK-that-is-also-a-FK (shared-PK 1:1 tables) gets distinct parent values.
   const uniqueSingles = new Map<string, Set<string>>();
-  for (const c of table.columns) if (c.isUnique && !c.isPrimaryKey) uniqueSingles.set(c.name, new Set());
+  const singlePk = table.primaryKey.length === 1 ? table.primaryKey[0] : null;
+  for (const c of table.columns) {
+    if ((c.isUnique && !c.isPrimaryKey) || c.name === singlePk) uniqueSingles.set(c.name, new Set());
+  }
   const compositeKeys = new Set<string>();
 
   const rows: RowData[] = [];
@@ -261,6 +265,10 @@ function produceValue(args: ProduceArgs): RowValue {
     return null;
   }
 
+  // Array-typed columns (e.g. Postgres TEXT[]): emit an empty array literal. Valid,
+  // NOT NULL-satisfying, and avoids inserting a scalar into an array column.
+  if (col.isArray) return [];
+
   // FK strategy: build a context where resolveReference uses already-emitted rows.
   const resolveReference: StrategyContext["resolveReference"] = (target, distribution) => {
     return pickFkValue(args, target, distribution);
@@ -284,9 +292,8 @@ function produceValue(args: ProduceArgs): RowValue {
     };
   }
 
-  // Unique columns: bounded retries to find a fresh value.
-  const isUniqueSingle =
-    col.isUnique && !col.isPrimaryKey && args.uniqueSingles.has(col.name);
+  // Unique columns (and single-column PKs): bounded retries to find a fresh value.
+  const isUniqueSingle = args.uniqueSingles.has(col.name);
   let attempts = 0;
   while (true) {
     let v: RowValue;
@@ -298,12 +305,20 @@ function produceValue(args: ProduceArgs): RowValue {
     }
 
     // Coerce to the column's declared numeric kind when the strategy produced a
-    // mismatched type (e.g. lorem.words fallback on a bigint column).
-    v = coerceToColumnKind(v, col);
+    // mismatched type (e.g. lorem.words fallback on a bigint column). FK values come
+    // straight from a parent row and must be inserted verbatim — never coerce those.
+    if (!col.foreignKey) v = coerceToColumnKind(v, col);
 
     // For string-max enforcement (best effort)
     if (typeof v === "string" && col.maxLength && v.length > col.maxLength) {
       v = v.slice(0, col.maxLength);
+    }
+
+    // A NOT NULL column must never receive null (e.g. an LLM "null" strategy or an
+    // empty FK pool). Substitute a generated non-null default.
+    if (v === null && !col.nullable) {
+      v = applyStrategy(defaultStrategyForColumn(col), ctx);
+      if (!col.foreignKey) v = coerceToColumnKind(v, col);
     }
 
     if (isUniqueSingle) {
@@ -410,6 +425,12 @@ interface BackfillInput {
 
 function backfillCyclicNulls(b: BackfillInput) {
   const { table, ir, dataset, rng, faker, rows, warnings } = b;
+  // Track used parent values per unique column so a 1:1 (OneToOne) cyclic FK gets
+  // distinct values rather than random repeats.
+  const usedByCol = new Map<string, Set<string>>();
+  for (const col of table.columns) {
+    if (col.isUnique || col.isPrimaryKey) usedByCol.set(col.name, new Set());
+  }
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
     for (const col of table.columns) {
@@ -427,8 +448,23 @@ function backfillCyclicNulls(b: BackfillInput) {
       }
       void faker;
       void b.tablePlan;
-      const pRow = rng.pick(parent);
-      row[col.name] = (pRow[col.foreignKey.column] ?? null) as RowValue;
+      const used = usedByCol.get(col.name);
+      let value: RowValue = null;
+      if (used) {
+        // Pick a parent value not already used by this unique column.
+        for (let attempt = 0; attempt < parent.length; attempt++) {
+          const cand = (rng.pick(parent)[col.foreignKey.column] ?? null) as RowValue;
+          if (cand !== null && !used.has(serializeForUnique(cand))) {
+            value = cand;
+            used.add(serializeForUnique(cand));
+            break;
+          }
+        }
+        if (value === null && col.nullable) continue; // no distinct value left; leave NULL
+      } else {
+        value = (rng.pick(parent)[col.foreignKey.column] ?? null) as RowValue;
+      }
+      row[col.name] = value;
     }
   }
   void warnings;

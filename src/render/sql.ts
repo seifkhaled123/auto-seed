@@ -84,6 +84,11 @@ function quoteValue(v: RowValue, dialect: SqlDialect): string {
   }
   if (typeof v === "bigint") return String(v);
   if (v instanceof Date) return `'${formatSqlDatetime(v)}'`;
+  if (Array.isArray(v)) {
+    // Postgres array literal: '{a,b}'. Empty array → '{}'.
+    const elems = v.map((e) => String(e).replace(/(["\\])/g, "\\$1"));
+    return `'{${elems.join(",")}}'`;
+  }
   if (typeof v === "object") return `'${escapeSqlString(JSON.stringify(v), dialect)}'`;
   // string
   return `'${escapeSqlString(String(v), dialect)}'`;

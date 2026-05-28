@@ -31,6 +31,8 @@ export interface ColumnIR {
   maxLength?: number;
   /** Computed/generated column (e.g. Postgres GENERATED ALWAYS AS (...) STORED). Cannot be inserted; omitted from output. */
   isGenerated?: boolean;
+  /** Array-typed column (e.g. Postgres TEXT[] / BIGINT[]). Rendered as an array literal. */
+  isArray?: boolean;
 }
 
 export interface TableIR {

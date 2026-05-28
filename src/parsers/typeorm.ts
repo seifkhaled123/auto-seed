@@ -264,7 +264,19 @@ export async function parseTypeOrmEntities(entityFiles: string[]): Promise<Schem
     const t = tables.find((tt) => tt.name === r.fromTable);
     if (!t) continue;
     const c = t.columns.find((cc) => cc.name === r.fromColumn);
-    if (c) c.foreignKey = { table: targetTable, column: r.toColumn || "id" };
+    if (!c) continue;
+    const refColName = r.toColumn || "id";
+    c.foreignKey = { table: targetTable, column: refColName };
+    // Synthetic FK columns are created as `int` by default; align their kind with
+    // the referenced PK (e.g. a uuid PK) so generated FK values match the parent type.
+    const targetT = tables.find((tt) => tt.name === targetTable);
+    const targetCol =
+      targetT?.columns.find((cc) => cc.name === refColName) ??
+      targetT?.columns.find((cc) => cc.isPrimaryKey);
+    if (targetCol) {
+      c.kind = targetCol.kind;
+      c.rawType = targetCol.rawType;
+    }
   }
 
   return { source: "typeorm", tables, warnings };
@@ -403,7 +415,10 @@ function relationDecIsNullable(dec: Decorator): boolean {
       if (/nullable\s*:\s*false/.test(t)) return false;
     }
   }
-  return false;
+  // TypeORM @ManyToOne / @OneToOne relations are nullable unless explicitly
+  // marked { nullable: false }. Defaulting to nullable also lets the engine break
+  // otherwise-"hard" FK cycles on these edges.
+  return true;
 }
 
 // Helper exported only for the detector module.

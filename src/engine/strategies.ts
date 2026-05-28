@@ -147,6 +147,17 @@ const FAKER_V9_TO_V10: Record<string, string> = {
   "internet.imageUrl": "image.url",
   "company.companyName": "company.name",
   "company.catchPhrase": "company.catchPhrase",
+  // company.bs* renamed to buzz* in v10
+  "company.bs": "company.buzzPhrase",
+  "company.bsNoun": "company.buzzNoun",
+  "company.bsAdjective": "company.buzzAdjective",
+  "company.bsBuzz": "company.buzzVerb",
+  "company.department": "commerce.department",
+  // commerce.* methods that moved/never existed in v10
+  "commerce.currencyCode": "finance.currencyCode",
+  "commerce.currencyName": "finance.currencyName",
+  "commerce.currencySymbol": "finance.currencySymbol",
+  "commerce.color": "color.human",
 };
 
 function callFaker(faker: Faker, dotted: string, args?: unknown[]): RowValue {
